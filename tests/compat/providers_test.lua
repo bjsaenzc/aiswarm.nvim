@@ -19,7 +19,7 @@ return {
     t:ok(vim.tbl_contains(args, "mock"))
   end },
   { id = "compat.providers.composer_default_matches_cli", tasks = { "SDD-016" }, suites = { "core", "compatibility" }, run = function(t)
-    vim.env.AISWARM_PROVIDER, vim.env.HIVE_PROVIDER = nil, nil
+    vim.env.AISWARM_PROVIDER = nil
     local U = require("aiswarm.legacy.ui")
     local line = U.form_template()[4]
     t:eq(line, "#: provider = " .. registry().default()); t:eq(registry().default(), "mock")

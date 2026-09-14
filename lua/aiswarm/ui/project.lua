@@ -11,7 +11,6 @@ local function describe()
     lines[#lines + 1] = ("project: %s (%s, schema %s)"):format(cur.root, cur.source, project.schema(cur.root))
   else
     lines[#lines + 1] = "project: none open"
-    if r.schema == "conflict" then lines[#lines + 1] = "both boards exist: " .. table.concat(r.conflict, " and ") end
     if r.candidate then lines[#lines + 1] = "candidate: " .. r.root .. " (not created; run :AISwarm init)" end
   end
   local s = project.suggestion()
@@ -33,7 +32,7 @@ function M.run(args)
   end
   if action == "choose" then
     local r = A()._resolved or project.resolve(A().config)
-    local candidates = r.conflict or {}
+    local candidates = {}
     local s = project.suggestion(); if s then candidates[#candidates + 1] = s.root end
     if project.current then candidates[#candidates + 1] = project.current.root end
     if #candidates == 0 then return A().notify("nothing to choose; " .. table.concat(describe(), " ")) end
@@ -55,7 +54,7 @@ function M.init(args)
   if not root then return A().err("no board location; pass a path: AISwarm init <root>") end
   root = project.canonical(root)
   local cmd = A().cmd({ "init" })
-  local env = A().env(); env.AISWARM_ROOT, env.HIVE_ROOT = root, root
+  local env = A().env(); env.AISWARM_ROOT = root
   vim.system(cmd, { text = true, env = env }, vim.schedule_wrap(function(o)
     if o.code ~= 0 then return A().err(A().failure(o)) end
     project.open(root, { source = "explicit" })

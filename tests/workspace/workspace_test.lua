@@ -222,7 +222,7 @@ return {
     need_snacks(t); ui.screen(140, 45)
     t:defer(function() sb.tmux({ "kill-server" }) end)
     local dir = t:tmpdir("first"); sb.run({ "git", "init", "-q", dir }, { env = { PATH = vim.env.PATH, HOME = vim.env.HOME } })
-    vim.env.AISWARM_ROOT, vim.env.HIVE_ROOT = nil, nil
+    vim.env.AISWARM_ROOT = nil
     pl.unload(); local A = require("aiswarm")
     local cwd = vim.uv.cwd(); vim.cmd.cd(dir); t:defer(function() vim.cmd.cd(cwd) end)
     A.setup({ bin = sb.bin("aiswarm"), follow = false, register_server = false }); t:defer(function() require("aiswarm.project").close() end)

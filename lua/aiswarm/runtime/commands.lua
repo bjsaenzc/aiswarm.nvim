@@ -72,7 +72,7 @@ reg("set", { run = function(a)
   local fields = { expected_revision = rev, title = a.opts.title, provider = a.opts.provider, depends_on = a.opts.deps or list_opt(a.opts.dep),
     priority = a.opts.priority, timeout = a.opts.timeout, isolation = a.opts.isolation, actor = a.opts.actor }
   if a.opts.file then fields.prompt = read_prompt(a) end
-  -- legacy key=value pairs (hive set) map onto the same validator with the current revision
+  -- legacy key=value pairs (aiswarm set) map onto the same validator with the current revision
   for _, kv in ipairs(a.pos) do
     local k, v = kv:match("^([%w_]+)=(.*)$")
     if k then

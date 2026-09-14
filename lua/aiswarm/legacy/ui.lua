@@ -40,7 +40,7 @@ function U.go(id)
   if not id then return end
   if not vim.env.TMUX then return H().warn("not inside tmux; run: tmux attach -t agent-" .. id) end
   local ok, err = pcall(vim.system, { "tmux", "switch-client", "-t", "agent-" .. id }, {}, vim.schedule_wrap(function(o)
-    if o.code ~= 0 then H().warn("no live session for " .. id .. " (try :HiveTail)") end
+    if o.code ~= 0 then H().warn("no live session for " .. id .. " (try :AISwarmTail)") end
   end))
   if not ok then H().err(tostring(err)) end
 end
@@ -157,10 +157,10 @@ function U.pick()
         U.go(item.id)
       end,
       actions = {
-        hive_tail = function(picker, item) if item then picker:close(); U.tail(item.id) end end,
-        hive_peek = function(picker, item) if item then picker:close(); U.peek(item.id) end end,
-        hive_kill = function(picker, item) if item then U.kill(item.id) end end,
-        hive_result = function(picker, item)
+        aiswarm_tail = function(picker, item) if item then picker:close(); U.tail(item.id) end end,
+        aiswarm_peek = function(picker, item) if item then picker:close(); U.peek(item.id) end end,
+        aiswarm_kill = function(picker, item) if item then U.kill(item.id) end end,
+        aiswarm_result = function(picker, item)
           if not item then return end
           local path = H().root() .. "/results/" .. item.id .. ".md"
           if vim.fn.filereadable(path) == 0 then return H().warn("no report for " .. item.id) end
@@ -171,10 +171,10 @@ function U.pick()
       win = {
         input = {
           keys = {
-            ["<c-t>"] = { "hive_tail",   mode = { "n", "i" }, desc = "tail -f" },
-            ["<c-p>"] = { "hive_peek",   mode = { "n", "i" }, desc = "peek" },
-            ["<c-x>"] = { "hive_kill",   mode = { "n", "i" }, desc = "kill + requeue" },
-            ["<c-r>"] = { "hive_result", mode = { "n", "i" }, desc = "open report" },
+            ["<c-t>"] = { "aiswarm_tail",   mode = { "n", "i" }, desc = "tail -f" },
+            ["<c-p>"] = { "aiswarm_peek",   mode = { "n", "i" }, desc = "peek" },
+            ["<c-x>"] = { "aiswarm_kill",   mode = { "n", "i" }, desc = "kill + requeue" },
+            ["<c-r>"] = { "aiswarm_result", mode = { "n", "i" }, desc = "open report" },
           },
         },
       },
@@ -383,8 +383,8 @@ function U.parse_form(lines)
 end
 
 function U.submit_form(buf, win)
-  if not vim.api.nvim_buf_is_valid(buf) or vim.b[buf].hive_submitting then return end
-  if vim.b[buf].hive_root and vim.b[buf].hive_root ~= H().root() then return H().err("project changed; open a new task form") end
+  if not vim.api.nvim_buf_is_valid(buf) or vim.b[buf].aiswarm_submitting then return end
+  if vim.b[buf].aiswarm_root and vim.b[buf].aiswarm_root ~= H().root() then return H().err("project changed; open a new task form") end
   if not (S().meta.capabilities or {}).atomic_add then
     return H().err("task creation requires the bundled aiswarm CLI with atomic_add support")
   end
@@ -395,11 +395,11 @@ function U.submit_form(buf, win)
   local tmp = vim.fn.tempname()
   local ok, write_err = pcall(vim.fn.writefile, prompt, tmp)
   if not ok or write_err ~= 0 then return H().err("could not write prompt: " .. tostring(write_err)) end
-  vim.b[buf].hive_submitting = true
+  vim.b[buf].aiswarm_submitting = true
   vim.list_extend(args, { "--file", tmp })
   H().run(args, function(o)
     os.remove(tmp)
-    if vim.api.nvim_buf_is_valid(buf) then vim.b[buf].hive_submitting = false end
+    if vim.api.nvim_buf_is_valid(buf) then vim.b[buf].aiswarm_submitting = false end
     if root ~= H().root() then return end
     if o.code ~= 0 then return H().err(H().failure(o)) end
     H().notify("queued " .. vim.trim(o.stdout))
@@ -412,7 +412,7 @@ end
 local function open_form(prefill)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, U.form_template(prefill))
-  vim.b[buf].hive_root = H().root()
+  vim.b[buf].aiswarm_root = H().root()
   vim.api.nvim_buf_set_name(buf, "aiswarm://task/" .. buf)
   local win
   win = Snacks.win({

@@ -5,7 +5,7 @@ Task: SDD-005 · Status: **accepted** · Date: 2026-09-14 · Requirement: R03
 ## On-disk layout (schema 3)
 
 ```
-<root>/                      .aiswarm/ for new boards; an upgraded .hive/ keeps its path
+<root>/                      .aiswarm/ for new boards; an upgraded .aiswarm/ keeps its path
   board.json                 {schema_version:3, board_id (UUID), journal_generation, name, created_at, scheduler_defaults}
   control/
     journal.jsonl            committed control records, append-only, one JSON object per line

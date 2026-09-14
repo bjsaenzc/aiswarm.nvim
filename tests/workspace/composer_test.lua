@@ -17,7 +17,7 @@ return {
   { id = "composer.prompt_first_and_provider_default", tasks = { "SDD-061" }, suites = { "core" }, run = function(t)
     need_snacks(t); ui.screen(140, 45)
     local root, A = ui.board_with_tasks(t, 1)
-    vim.env.AISWARM_PROVIDER, vim.env.HIVE_PROVIDER = nil, nil
+    vim.env.AISWARM_PROVIDER = nil
     local buf = C().open({ fresh = true })
     t:defer(function() local _, st = current_composer(); if st and st.win and st.win:valid() then st.closed = true; st.win:close() end end)
     local lines = ui.lines(buf)

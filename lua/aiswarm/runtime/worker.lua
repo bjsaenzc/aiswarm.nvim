@@ -162,7 +162,7 @@ function M.main(opts)
   local env = {}
   for k, v in pairs(vim.fn.environ()) do env[#env + 1] = k .. "=" .. v end
   for k, v in pairs({ AISWARM_ROOT = root, AISWARM_BOARD_ID = ctx.board.board_id, AISWARM_TASK = task.id, AISWARM_ATTEMPT = attempt_id,
-    AISWARM_ATTEMPT_DIR = paths.dir, AISWARM_REPORT_PATH = paths.report, AISWARM_PROGRESS = helper, AISWARM_INBOX = paths.inbox, HIVE_ROOT = root }) do
+    AISWARM_ATTEMPT_DIR = paths.dir, AISWARM_REPORT_PATH = paths.report, AISWARM_PROGRESS = helper, AISWARM_INBOX = paths.inbox, AISWARM_ROOT = root }) do
     env[#env + 1] = k .. "=" .. v
   end
 

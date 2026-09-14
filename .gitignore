@@ -1,4 +1,37 @@
+# Project runtime state and test artifacts
 artifacts/
 .aiswarm/
-.hive/
 *.log
+
+# Compiled Lua and local LuaRocks dependencies
+*.luac
+*.rock
+.luarocks/
+lua_modules/
+
+# LuaCov output
+luacov.stats.out
+luacov.report.out
+
+# Vim/Neovim temporary files and generated help tags
+*.swp
+*.swo
+*.swn
+*~
+Session.vim
+Session.vim.vim
+*.shada
+*.shada.tmp.*
+/doc/tags
+/doc/tags-??
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+
+# Local architecture analysis
+graphify-out/
+
+# Stray Neovim log written when a test-run server could not start
+.nvimlog

@@ -2,9 +2,9 @@
 
 Status: Proposed · Date: 2026-09-13 · Baseline: `c7c636a`
 
-**Recommendation:** evolve Hive into `aiswarm.nvim`, a persistent Neovim workspace for coordinating tasks, inspecting execution attempts and following agent activity. Keep the existing Snacks dependency, tmux execution model and local file-based board. Introduce a responsive task list with an inspector, a unified activity feed, and a replayable telemetry contract shared by the editor and external orchestrators.
+**Recommendation:** evolve AISwarm into `aiswarm.nvim`, a persistent Neovim workspace for coordinating tasks, inspecting execution attempts and following agent activity. Keep the existing Snacks dependency, tmux execution model and local file-based board. Introduce a responsive task list with an inspector, a unified activity feed, and a replayable telemetry contract shared by the editor and external orchestrators.
 
-This is a specification, not an implementation. The accompanying [complete code audit](hive-code-audit.md) records the architecture, 32 source-grounded findings and isolated validation. Proposed APIs/configuration below do not exist yet. Runtime performance numbers are acceptance targets, not measurements of Hive.
+This is a specification, not an implementation. The accompanying [complete code audit](aiswarm-baseline-audit.md) records the architecture, 32 source-grounded findings and isolated validation. Proposed APIs/configuration below do not exist yet. Runtime performance numbers are acceptance targets, not measurements of AISwarm.
 
 ## 1. Problem, goals and boundaries
 
@@ -14,7 +14,7 @@ The first release must let a user answer four questions from one workspace: **Wh
 
 | Goal | Acceptance target |
 |---|---|
-| Name migration | `aiswarm.nvim`, `aiswarm`, `:AISwarm` and `require("aiswarm")` are canonical; existing boards and documented compatibility entry points remain usable. |
+| Package identity | Standalone `aiswarm.nvim`, `aiswarm`, `:AISwarm`, `require("aiswarm")` and `AISWARM_*` only. Schema-v2 data remains explicitly importable; there are no alternate plugin entry points. |
 | Orientation | A first-time user can initialize a board, select an installed provider and queue a mock task from Neovim without memorizing shell commands. |
 | Inspection | From a selected task, activity/output/report is reachable in at most two actions without losing task selection or board context. |
 | Real-time reporting | Under the reference load, p95 ≤500 ms from a flushed local worker activity/log record to its display and to receipt by a subscribed external orchestrator process. Provider-side buffering and model response time are measured separately. |
@@ -134,7 +134,7 @@ Use `<leader>A` for this configuration; no existing uppercase `<leader>A` mappin
 
 Workspace-local keys: `j/k` navigate; `Enter` inspect; `Tab/Shift-Tab` cycle panes; `t` output; `R` report; `g` explicit tmux attach; `n` compose; `e` edit a queued task; `x` cancel; `r` retry an eligible terminal task; `P` toggle dispatch pause; `/` search; `?` action menu; `q` close workspace. `f` pauses/resumes **view following** only in activity/output; footer says “pause view,” never just “pause.” `Ctrl-r` requests reconciliation. Avoid changing Neovim's normal `<C-w>` window navigation.
 
-Actions bind to `{board_id, task_id, attempt_id, expected_revision}` when invoked, then validate that target at execution time. If state changed, show “Task changed; review current state” and refresh. Cancellation confirmation names the task/attempt and uses an inline Yes/No prompt; a completed task does not offer cancel. Legacy `HiveKill` retains its old cancel-and-requeue meaning during compatibility, with an explicit warning; it must not silently become permanent cancellation.
+Actions bind to `{board_id, task_id, attempt_id, expected_revision}` when invoked, then validate that target at execution time. If state changed, show “Task changed; review current state” and refresh. Cancellation confirmation names the task/attempt and uses an inline Yes/No prompt; a completed task does not offer cancel. Legacy `AISwarmKill` retains its old cancel-and-requeue meaning during compatibility, with an explicit warning; it must not silently become permanent cancellation.
 
 ### First use and recovery
 
@@ -164,7 +164,7 @@ Toast only actionable failure, supported input-required and completion according
 
 ## 5. Domain model and lifecycle
 
-Separate four things currently conflated by Hive: task intent, an execution attempt, the scheduler, and the editor connection.
+Separate four things currently conflated by AISwarm: task intent, an execution attempt, the scheduler, and the editor connection.
 
 | Entity | Required fields |
 |---|---|
@@ -218,7 +218,7 @@ Bash control commands ─> validated lifecycle writer │
 
 Use a single telemetry writer per attempt. Explicit `aiswarm progress`/`report-event` commands place validated messages in an atomic spool/inbox for that writer rather than concurrently appending its file. Worker/stream helpers use asynchronous process and file APIs with bounded queues. A headless worker owns provider stdout/stderr, exit status and watchdog; its death is detected by scheduler reconciliation. Selected pane capture is an optional inspection fallback, not the source of structured status.
 
-Avoid spawning `jq`, `hive-push`, or `nvim --remote-expr` for each output line. The existing journal follower demonstrates useful cursor handling but `tail -F` plus periodic snapshots does not itself meet the latency target. The stream helper watches file changes with a bounded 250 ms polling fallback; it incrementally reads offsets and drains records without restarting a process on each event.
+Avoid spawning `jq`, `aiswarm-push`, or `nvim --remote-expr` for each output line. The existing journal follower demonstrates useful cursor handling but `tail -F` plus periodic snapshots does not itself meet the latency target. The stream helper watches file changes with a bounded 250 ms polling fallback; it incrementally reads offsets and drains records without restarting a process on each event.
 
 ### Two channels with explicit ordering
 
@@ -319,8 +319,7 @@ Refactor the 429-line UI and 283-line state singleton into components with expli
 ```text
 aiswarm.nvim/
   bin/aiswarm, bin/aiswarm-push           canonical launchers
-  bin/hive, bin/hive-push                 temporary compatibility wrappers
-  runtime/worker.lua, runtime/stream.lua  clean headless entry points
+  runtime/worker.lua, runtime/cli.lua  clean headless entry points
   lua/aiswarm/
     init.lua, config.lua, commands.lua, health.lua
     project.lua                         board selection/session lifetime
@@ -331,12 +330,10 @@ aiswarm.nvim/
     runtime/                            worker I/O, journal, stream helpers
     providers/                          registry and tested adapters
     ui/workspace.lua, ui/tasks.lua, ui/inspector.lua
-    ui/activity.lua, ui/output.lua, ui/composer.lua
+    ui/activity.lua, ui/loader.lua, ui/composer.lua
     ui/actions.lua, ui/highlights.lua
-    compat.lua                          old config/events/command routing
-  lua/hive/                             thin API/health compatibility shims
   plugin/aiswarm.lua
-  doc/aiswarm.txt, doc/hive.txt
+  doc/aiswarm.txt
   tests/                                fixtures and headless/backend checks
 ```
 
@@ -351,7 +348,6 @@ require("aiswarm").setup({
   ui = { layout = "float", width = 0.92, height = 0.86, icons = "unicode", motion = false },
   telemetry = { enabled = true, heartbeat_ms = 5000, flush_ms = 100, reconcile_ms = 10000 },
   notify = { failed = true, completed = true, input_required = true, progress = false },
-  compat = { hive_commands = true, hive_events = false },
 })
 
 require("aiswarm").open({ task = "T-014", tab = "activity" })
@@ -360,24 +356,23 @@ require("aiswarm").statusline() -- cached; no I/O
 local unsubscribe = require("aiswarm").subscribe(function(event) end)
 ```
 
-All proposed settings must have validated types/ranges and documented ownership. Root switching is separate from `setup()` so it preserves preferences. `User AISwarmEvent` receives normalized events; optionally emit translated `HiveEvent` for compatibility, off by default to avoid duplicate user hooks. A lualine component reads cached counts/attention/connectivity and does not trigger lazy loading or subprocesses every redraw.
+All proposed settings must have validated types/ranges and documented ownership. Root switching is separate from `setup()` so it preserves preferences. `User AISwarmEvent` is the single normalized control-event hook. A lualine component reads cached counts/attention/connectivity and does not trigger lazy loading or subprocesses every redraw.
 
-## 8. Rename and data migration
+## 8. Standalone replacement and data migration
 
-Renaming strings alone would break CLI discovery, require paths, lazy loading, registered RPC callbacks, branches, task paths and existing scripts. Treat this as a compatibility release followed by a schema upgrade.
+The replacement decision of 2026-09-14 supersedes the transitional namespace strategy in the historical plan. The package has one installable identity; storage migration remains a separate, explicit operation. The [implementation audit](aiswarm-implementation-audit.md) distinguishes current behavior from this target specification.
 
-| Surface | Canonical target and migration |
-|---|---|
-| Plugin folder/spec | ``, `lua/plugins/nvim-aiswarm.lua`, lazy name `aiswarm.nvim`; explicitly set `main="aiswarm"` and update command/key lazy triggers. Only one canonical plugin loads. |
-| Lua/API | `require("aiswarm")`; thin `require("hive")` and submodule shims forward supported public behavior and warn once. Do not instantiate a second store/follower. |
-| Commands | `:AISwarm` subcommands; documented `:Hive*` aliases remain through one compatibility release, including exact old kill/requeue semantics. Remove aliases only in an announced breaking release. |
-| Executables/environment | `aiswarm`, `aiswarm-push`, `AISWARM_*`; accept corresponding `HIVE_*` with a once-per-process warning. Canonical variables win when both are supplied. Root precedence is explicit option → AISWARM_ROOT → HIVE_ROOT → discovered board. |
-| New board location | `.aiswarm/` for new boards. Auto-discover an existing `.hive/` in compatibility mode; if both exist at the selected project root, require explicit board selection and remember it. Never silently merge them. |
-| Existing board location | Keep `.hive/` in place by default. New name does not require moving storage. Upgrade schema separately; old absolute prompt/result references must remain valid or be rewritten by the migration transaction. |
-| Events/registration | `AISwarmEvent`, `AISwarmLifecycle`, `AISwarm*` highlights/filetype/URI; compatibility RPC routes old `hive-push` through the single store. Existing `nvim.server` is tolerated for the transition. |
-| tmux/worktrees | New sessions use board/attempt identities; new worktree branches may use `aiswarm/<task-id>`. Existing sessions/branches retain recorded names until stopped or naturally retired. No blind branch/worktree rename. |
-| Repository integration | Update README, help tags, executable examples, shell PATH guidance, which-key, lualine and the local lazy spec. Add `.aiswarm/` and `.hive/` to project runtime ignores. Do not hand-edit lockfile revisions to imply an untested dependency upgrade. |
-| Packaging | Include actual README/license/third-party notices; reconcile existing MIT help text with backend CC0 notice based on authoritative licensing, not a guessed license conversion. |
+| Surface | Required contract |
+| --- | --- |
+| Package | Repository root is the plugin root. lazy name `aiswarm.nvim`, `main="aiswarm"`, one command trigger `AISwarm`; examples live in `examples/lazy.lua`. |
+| Lua/API | `require("aiswarm")` owns one session/store. No alternate namespace shims. Internal schema adapters are not a second public plugin. |
+| Commands | `:AISwarm` subcommands only; no prefixed command aliases. Existing CLI command spellings may remain under the canonical executable with explicit semantics. |
+| Executables/environment | `aiswarm`, `aiswarm-push`, `aiswarm-progress`, and `AISWARM_*`. Root precedence: explicit selection → AISWARM_ROOT → discovered board. |
+| Board storage | New boards use `.aiswarm/`; only that directory is auto-discovered. Any existing schema-v2 board can be opened by an explicit path. Never move or merge data automatically. |
+| Events | `AISwarmEvent` and canonical RPC callbacks; preserve root checks, event deduplication and owner-checked server registration. |
+| Sessions/worktrees | New resources use board/attempt identities. Existing recorded resource names and artifact paths are data, not names to rewrite blindly. |
+| Integration | README, help, example lazy/which-key/lualine configuration and scripts name this package only. Ignore `.aiswarm/`. Do not claim dependency versions are locked when no lockfile exists. |
+| Licensing | Retain the bundled Bash public-domain/CC0 header and the actual MIT notice; do not invent upstream attribution or license conversion. |
 
 ### Upgrade procedure
 
@@ -387,7 +382,7 @@ Renaming strings alone would break CLI discovery, require paths, lazy loading, r
 4. Write upgraded state to a staging area, validate referential integrity and journal projections, then atomically publish the schema manifest as the final commit marker. Interrupted migration can resume/roll back from its manifest. Do not run old and new schemas as dual writers.
 5. On first open, show the migrated board, imported-history labels and next actions. Restart the scheduler only through the explicit start action; migration itself does not execute tasks.
 
-Schema v2 mode supports existing monitoring and established v2 actions, with a visible “Legacy board: upgrade for attempt history and structured telemetry” message. It cannot offer reliable per-attempt history, v3 cancellation or full telemetry guarantees. Compatibility commands on a v3 board translate to validated v3 operations; bundled old `hive kill` deliberately translates to cancel followed by explicit requeue in a serialized operation.
+Schema v2 mode supports existing monitoring and established v2 actions, with a visible “Legacy board: upgrade for attempt history and structured telemetry” message. It cannot offer reliable per-attempt history, v3 cancellation or full telemetry guarantees. Compatibility commands on a v3 board translate to validated v3 operations; bundled old `aiswarm kill` deliberately translates to cancel followed by explicit requeue in a serialized operation.
 
 Rollback before v3 work starts restores the backup and old launcher configuration. Once v3 has new attempts/events, downgrading by overwriting the board would lose data; export those artifacts and explicitly resolve them before restoring. Retain migration backups until the user archives them. A later optional directory move must rewrite/verify paths and registrations while no worker is active.
 
@@ -398,7 +393,7 @@ Deliver in reviewable increments; UI polish depends on reliable lifecycle/identi
 | Phase | Deliverable | Exit gate |
 |---|---|---|
 | 0 — Baseline fixtures | Record current CLI/state contracts and mock scenarios; establish lowest supported Neovim/Snacks combinations. | Reproduce the audit regressions and keep current ordering/form-preservation behavior covered. |
-| 1 — Brand and compatibility | Canonical aiswarm entry points, shims, noncolliding keys, corrected help/health, explicit project selection. | Existing v2 mock board works through both names using one runtime/store; no runtime data moved; Git/Sidekick keys remain distinct. |
+| 1 — Brand and compatibility | Canonical aiswarm entry points, noncolliding keys, corrected help/health, explicit project selection. | Existing v2 mock board opens through the canonical package using one runtime/store; no runtime data moved; Git/Sidekick keys remain distinct. |
 | 2 — Lifecycle foundation | v3 board/attempt IDs, transaction/recovery, revision checks, cancellation/retry, dependency reasons, ownership checks and migration. | Crash/concurrency and two-project fixtures pass; no stale report/late outcome crosses attempts. |
 | 3 — Workspace and composer | Responsive persistent views, asynchronous previews, stable selection, drafts, inline validation, accessibility. | Wide/medium/narrow keyboard journeys pass; no blocking preview; selection remains on the same task through reorder. |
 | 4 — Telemetry and orchestrator | Worker wrapper, generic logs/heartbeat/progress, stream/replay/ack, combined activity and output, process health. | Latency/load/reconnect/consumer-ack gates pass with mock and stub processes; explicit gaps and bounded memory demonstrated. This completes the core proposal. |
@@ -419,7 +414,7 @@ Do not advertise aiswarm's real-time orchestrator reporting as delivered after p
 | Logs/load | Ten mock workers and defined flood load; bound UI/worker queues, inspect only one transcript, close/reopen views, suspend scrolling, simulate disk-full and slow writes. Report latency distribution, memory, CPU, truncation/gap counts and raw bytes captured. |
 | UX | Missing vs empty vs stopped board; keyboard-only new→run→inspect→cancel→retry→report; input errors retain drafts; actions target original IDs; blocked reason visible; no-output is different from failed read; restoring project preserves preferences. |
 | Layout/theme | 140×45, 100×30, 80×24, 60×20, 35×10; live resize; light/dark themes; ASCII/no Nerd Font; CJK/combining/emoji titles; long paths; thousands of tasks; render does not steal focus or log scroll. Capture actual terminal screenshots for review. |
-| Compatibility | Legacy requires, commands, environment precedence and push callbacks; v2 board selection; both-directory conflict; old kill semantics documented; one store/follower; migration backup/rollback; help links resolve. |
+| Compatibility | Single canonical namespace/command registration, AISWARM environment precedence and push callbacks; explicit v2 board selection; documented kill semantics; one store/follower; migration backup/rollback; help links resolve. |
 | Cleanup | Repeated open/close, project switch, setup and exit leave no obsolete timers/watchers/jobs/subscriptions or registration ownership errors. Headless helper uses no user configuration. |
 | Platform/providers | macOS Bash 3.2 + GNU timeout and Linux; actual supported Neovim minimum/current stable; pinned Snacks. Real provider smoke tests explicitly record versions and capabilities. Never use paid provider runs as required deterministic unit tests. |
 

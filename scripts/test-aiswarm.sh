@@ -22,7 +22,7 @@ usage() { sed -n '2,15p' "$0"; }
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN=""
 # standalone checkout (plugin at the repository root) or nested under lua/myPlugins/
-for candidate in "$REPO" "$REPO/lua/myPlugins/aiswarm.nvim" "$REPO/lua/myPlugins/hive.nvim"; do
+for candidate in "$REPO" "$REPO/lua/myPlugins/aiswarm.nvim"; do
   [ -f "$candidate/tests/runner.lua" ] && { PLUGIN="$candidate"; break; }
 done
 [ -n "$PLUGIN" ] || { echo "test-aiswarm: no plugin tests directory found" >&2; exit 3; }
@@ -67,7 +67,7 @@ SANDBOX_PATH="$RUN/bin:$tool_dirs:/usr/bin:/bin"
 TMUX_SOCKET="aiswarm-test-$$"
 
 # Scrub inherited environment that could leak the user's board or session.
-for v in $(env | awk -F= '/^(HIVE_|AISWARM_)/{print $1}'); do
+for v in $(env | awk -F= '/^AISWARM_/{print $1}'); do
   case "$v" in AISWARM_NVIM|AISWARM_TEST_SNACKS|AISWARM_TEST_CHILD_TIMEOUT_MS|AISWARM_BENCH_*) ;; *) unset "$v";; esac
 done
 unset TMUX TMUX_PANE NVIM NVIM_LISTEN_ADDRESS VIMINIT MYVIMRC EXINIT

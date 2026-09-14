@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # aiswarm — local multi-agent control plane built on tmux (canonical launcher).
 #
-# Boards using the legacy v2 schema (.hive/) are served by the v2 Bash implementation
-# below, unchanged. Boards using schema 3 (board.json) are served by the headless
+# Boards using the legacy v2 schema (.aiswarm/) are served by the v2 Bash implementation
+# below, using the canonical environment. Boards using schema 3 (board.json) are served by the headless
 # Neovim runtime (runtime/cli.lua); see docs/aiswarm-decisions/0001-worker-runtime.md.
 #
-#   orchestrator (you or an agent)  ->  board (.aiswarm/ or .hive/)  ->  worker agents (tmux sessions)
+#   orchestrator (you or an agent)  ->  board (.aiswarm/)  ->  worker agents (tmux sessions)
 #
 # Provider agnostic: claude | codex | gemini | aider | cursor-agent | mock
 # Dependencies: bash 3.2+, tmux 3.2+, jq, GNU timeout (coreutils), git (optional),
@@ -22,47 +22,20 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]
 PLUGIN_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
 AISWARM_VERSION="3.0.0-dev"
 
-# ---------------------------------------------------------------- environment aliases (SDD-011)
-# Canonical AISWARM_* variables win; legacy HIVE_* values are accepted with one warning
-# per process (silenced with AISWARM_QUIET_LEGACY=1). The v2 body reads HIVE_* names,
-# so the effective value is exported under both names.
-_legacy_warned=""
-_alias_env() { # _alias_env NEW OLD
-  local new="$1" old="$2" nv ov
-  eval "nv=\${$new:-}"; eval "ov=\${$old:-}"
-  if [ -n "$nv" ]; then export "$old=$nv"
-  elif [ -n "$ov" ]; then
-    export "$new=$ov"
-    if [ -z "${AISWARM_QUIET_LEGACY:-}" ] && [ -z "$_legacy_warned" ]; then
-      printf 'aiswarm: %s is deprecated; use %s\n' "$old" "$new" >&2; _legacy_warned=1
-    fi
-  fi
-}
-for _v in ROOT SESSION WIP PROVIDER TIMEOUT TICK MAX_TURNS WORKTREES ON_EVENT PEEK_LINES MOCK_SLEEP ACTOR; do
-  _alias_env "AISWARM_$_v" "HIVE_$_v"
-done
-unset _v
-
-# Root precedence: explicit environment (canonical, then legacy) → discovered board in the
-# cwd's ancestors (.aiswarm, then .hive; both present is a conflict) → ./.aiswarm candidate.
+# Root precedence: AISWARM_ROOT → discovered board in the
+# cwd's ancestors (.aiswarm) → ./.aiswarm candidate.
 _discover_root() {
   local d="$PWD"
   while :; do
-    if [ -d "$d/.aiswarm" ] && [ -d "$d/.hive" ]; then
-      printf 'aiswarm: both %s/.aiswarm and %s/.hive exist; set AISWARM_ROOT to choose\n' "$d" "$d" >&2; exit 4
-    fi
     [ -d "$d/.aiswarm" ] && { printf '%s' "$d/.aiswarm"; return; }
-    [ -d "$d/.hive" ] && { printf '%s' "$d/.hive"; return; }
     [ "$d" = "/" ] && break
     d="$(dirname "$d")"
   done
-  # candidate: under the legacy name the documented v2 default ($PWD/.hive); otherwise the Git
-  # toplevel when inside a repository, else the cwd, plus /.aiswarm (never created here)
-  if [ "${AISWARM_INVOKED_AS:-}" = hive ]; then printf '%s' "$PWD/.hive"; return; fi
+  # Candidate at the Git toplevel or cwd; discovery never creates storage.
   d="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")"
   printf '%s' "$d/.aiswarm"
 }
-if [ -z "${AISWARM_ROOT:-}" ]; then AISWARM_ROOT="$(_discover_root)"; export AISWARM_ROOT; export HIVE_ROOT="$AISWARM_ROOT"; fi
+if [ -z "${AISWARM_ROOT:-}" ]; then AISWARM_ROOT="$(_discover_root)"; export AISWARM_ROOT; fi
 
 # Headless Neovim runtime for v3 boards.
 _nvim_bin() {
@@ -82,16 +55,16 @@ _run_v3() { # dispatch a command to the Lua runtime
 }
 
 # ---------------------------------------------------------------- configuration
-HIVE_ROOT="${HIVE_ROOT:-$PWD/.hive}"
-HIVE_SESSION="${HIVE_SESSION:-hive}"          # the orchestrator/control session
-HIVE_WIP="${HIVE_WIP:-3}"                     # max concurrently running agents
-HIVE_PROVIDER="${HIVE_PROVIDER:-mock}"        # default provider for new tasks
-HIVE_TIMEOUT="${HIVE_TIMEOUT:-1800}"          # per-task wall clock, seconds
-HIVE_TICK="${HIVE_TICK:-3}"                   # scheduler period, seconds
-HIVE_MAX_TURNS="${HIVE_MAX_TURNS:-40}"
-HIVE_WORKTREES="${HIVE_WORKTREES:-}"          # dir for git worktrees; empty = disabled
-HIVE_ON_EVENT="${HIVE_ON_EVENT:-}"            # command run with each event line (push channel)
-HIVE_PEEK_LINES="${HIVE_PEEK_LINES:-120}"     # default scrollback for `hive peek`
+AISWARM_ROOT="${AISWARM_ROOT:-$PWD/.aiswarm}"
+AISWARM_SESSION="${AISWARM_SESSION:-aiswarm}"          # the orchestrator/control session
+AISWARM_WIP="${AISWARM_WIP:-3}"                     # max concurrently running agents
+AISWARM_PROVIDER="${AISWARM_PROVIDER:-mock}"        # default provider for new tasks
+AISWARM_TIMEOUT="${AISWARM_TIMEOUT:-1800}"          # per-task wall clock, seconds
+AISWARM_TICK="${AISWARM_TICK:-3}"                   # scheduler period, seconds
+AISWARM_MAX_TURNS="${AISWARM_MAX_TURNS:-40}"
+AISWARM_WORKTREES="${AISWARM_WORKTREES:-}"          # dir for git worktrees; empty = disabled
+AISWARM_ON_EVENT="${AISWARM_ON_EVENT:-}"            # command run with each event line (push channel)
+AISWARM_PEEK_LINES="${AISWARM_PEEK_LINES:-120}"     # default scrollback for `aiswarm peek`
 
 E_NOTFOUND=2; E_CONFLICT=3; E_ENV=4
 
@@ -108,11 +81,11 @@ count(){ local n=0 f; for f in "$@"; do [ -e "$f" ] && n=$((n+1)); done; printf 
 
 with_lock() ( # subshell owns the lock and releases it on exit/signals
   local name="$1"; shift
-  local lock="$HIVE_ROOT/locks/$name.d" attempts=0
-  mkdir -p "$HIVE_ROOT/locks"
+  local lock="$AISWARM_ROOT/locks/$name.d" attempts=0
+  mkdir -p "$AISWARM_ROOT/locks"
   until mkdir "$lock" 2>/dev/null; do
     attempts=$((attempts + 1))
-    [ "$attempts" -lt 200 ] || die $E_ENV "timed out waiting for $lock; check for a stopped/crashed hive process"
+    [ "$attempts" -lt 200 ] || die $E_ENV "timed out waiting for $lock; check for a stopped/crashed aiswarm process"
     sleep 0.05
   done
   trap 'rmdir "$lock" 2>/dev/null || true' EXIT
@@ -127,7 +100,7 @@ valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; }
 task_file() { # locate a task in any state
   local id="$1" st
   for st in ready active done failed; do
-    [ -f "$HIVE_ROOT/tasks/$st/$id.json" ] && { printf '%s' "$HIVE_ROOT/tasks/$st/$id.json"; return 0; }
+    [ -f "$AISWARM_ROOT/tasks/$st/$id.json" ] && { printf '%s' "$AISWARM_ROOT/tasks/$st/$id.json"; return 0; }
   done
   return 1
 }
@@ -142,20 +115,20 @@ tset() { # tset <id> [jq args...] <jq-filter>  — rewrite a task file atomicall
 }
 
 _next_seq() { # monotonic counter; falls back to a line count if the file is lost
-  local f="$HIVE_ROOT/seq" n
-  if [ -f "$f" ]; then n=$(cat "$f"); else n=$(wc -l < "$HIVE_ROOT/events.jsonl" 2>/dev/null || echo 0); fi
+  local f="$AISWARM_ROOT/seq" n
+  if [ -f "$f" ]; then n=$(cat "$f"); else n=$(wc -l < "$AISWARM_ROOT/events.jsonl" 2>/dev/null || echo 0); fi
   n=$(( n + 1 )); printf '%s' "$n" > "$f"; printf '%s' "$n"
 }
 
 _emit_event() { # runs under the events lock: assign seq, append, push
   local type="$1" id="$2" actor="$3" extra="$4" seq line
   seq=$(_next_seq)
-  # seq is written first on purpose: `hive events --since` can scan it with awk
+  # seq is written first on purpose: `aiswarm events --since` can scan it with awk
   line=$(jq -cn --argjson seq "$seq" --arg ts "$(now)" --arg t "$type" --arg id "$id" \
                 --arg actor "$actor" --argjson x "$extra" \
                 '{seq:$seq, ts:$ts, type:$t, task:$id, actor:$actor} + $x')
-  printf '%s\n' "$line" >> "$HIVE_ROOT/events.jsonl"
-  [ -n "$HIVE_ON_EVENT" ] && { $HIVE_ON_EVENT "$line" >/dev/null 2>&1 & disown; } || true
+  printf '%s\n' "$line" >> "$AISWARM_ROOT/events.jsonl"
+  [ -n "$AISWARM_ON_EVENT" ] && { $AISWARM_ON_EVENT "$line" >/dev/null 2>&1 & disown; } || true
   return 0
 }
 
@@ -165,7 +138,7 @@ event() { # event <type> <task-id> [key=value ...]   — append-only journal
   for kv in "$@"; do
     extra=$(jq -c --arg k "${kv%%=*}" --arg v "${kv#*=}" '. + {($k): $v}' <<<"$extra")
   done
-  with_lock events _emit_event "$type" "$id" "${HIVE_ACTOR:-orchestrator}" "$extra"
+  with_lock events _emit_event "$type" "$id" "${AISWARM_ACTOR:-orchestrator}" "$extra"
 }
 
 cmd_progress() { # heartbeat from inside a running agent or from a provider hook
@@ -181,7 +154,7 @@ notify() { # notify <title> <body> — desktop toast + tmux status + window bell
   fi
   # OSC 777 straight to every attached client tty. Bypasses tmux rendering, so it
   # also works from background hooks and from panes that are not currently visible.
-  if have tmux && tmux has-session -t "$HIVE_SESSION" 2>/dev/null; then
+  if have tmux && tmux has-session -t "$AISWARM_SESSION" 2>/dev/null; then
     while read -r tty; do
       [ -c "$tty" ] && printf '\033]777;notify;%s;%s\a' "$title" "$body" > "$tty" 2>/dev/null || true
     done < <(tmux list-clients -F '#{client_tty}' 2>/dev/null || true)
@@ -191,10 +164,10 @@ notify() { # notify <title> <body> — desktop toast + tmux status + window bell
 
 # ---------------------------------------------------------------- commands
 cmd_init() {
-  mkdir -p "$HIVE_ROOT"/{context,tasks/{ready,active,done,failed,prompts},results,logs,locks,agents}
-  [ -f "$HIVE_ROOT/events.jsonl" ] || : > "$HIVE_ROOT/events.jsonl"
-  [ -f "$HIVE_ROOT/seq" ] || printf '0' > "$HIVE_ROOT/seq"
-  [ -f "$HIVE_ROOT/context/MISSION.md" ] || cat > "$HIVE_ROOT/context/MISSION.md" <<'EOF'
+  mkdir -p "$AISWARM_ROOT"/{context,tasks/{ready,active,done,failed,prompts},results,logs,locks,agents}
+  [ -f "$AISWARM_ROOT/events.jsonl" ] || : > "$AISWARM_ROOT/events.jsonl"
+  [ -f "$AISWARM_ROOT/seq" ] || printf '0' > "$AISWARM_ROOT/seq"
+  [ -f "$AISWARM_ROOT/context/MISSION.md" ] || cat > "$AISWARM_ROOT/context/MISSION.md" <<'EOF'
 # Mission
 <one paragraph: what we are building and what "done" means>
 
@@ -204,20 +177,20 @@ cmd_init() {
 
 ## Glossary / domain facts
 EOF
-  [ -f "$HIVE_ROOT/context/DECISIONS.md" ] || cat > "$HIVE_ROOT/context/DECISIONS.md" <<'EOF'
+  [ -f "$AISWARM_ROOT/context/DECISIONS.md" ] || cat > "$AISWARM_ROOT/context/DECISIONS.md" <<'EOF'
 # Decision log (append-only; newest last)
 Format: <UTC timestamp> | <task-id> | <decision> | <rationale>
 EOF
-  [ -f "$HIVE_ROOT/context/INTERFACES.md" ] || cat > "$HIVE_ROOT/context/INTERFACES.md" <<'EOF'
+  [ -f "$AISWARM_ROOT/context/INTERFACES.md" ] || cat > "$AISWARM_ROOT/context/INTERFACES.md" <<'EOF'
 # Contracts between workstreams
 Anything one agent must not change without renegotiating with the orchestrator:
 function signatures, schemas, endpoints, file ownership.
 EOF
-  echo "initialized $HIVE_ROOT"
+  echo "initialized $AISWARM_ROOT"
 }
 
-cmd_add() { # hive add --id T-001 --title "..." [--provider claude] [--dep T-000] [--file p.md]
-  local id="" title="" provider="$HIVE_PROVIDER" mode="headless" timeout="$HIVE_TIMEOUT"
+cmd_add() { # aiswarm add --id T-001 --title "..." [--provider claude] [--dep T-000] [--file p.md]
+  local id="" title="" provider="$AISWARM_PROVIDER" mode="headless" timeout="$AISWARM_TIMEOUT"
   local promptfile="" worktree=false priority=50; local -a deps=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -233,10 +206,10 @@ cmd_add() { # hive add --id T-001 --title "..." [--provider claude] [--dep T-000
       *) die "unknown flag $1";;
     esac
   done
-  [ -d "$HIVE_ROOT/tasks/ready" ] || die $E_ENV "run hive init first"
+  [ -d "$AISWARM_ROOT/tasks/ready" ] || die $E_ENV "run aiswarm init first"
   if [ -z "$id" ]; then
     local f base digits max=0
-    for f in "$HIVE_ROOT"/tasks/{ready,active,done,failed}/T-*.json; do
+    for f in "$AISWARM_ROOT"/tasks/{ready,active,done,failed}/T-*.json; do
       [ -e "$f" ] || continue
       base="${f##*/}"; digits="${base#T-}"; digits="${digits%.json}"
       case "$digits" in ''|*[!0-9]*) continue;; esac
@@ -253,13 +226,13 @@ cmd_add() { # hive add --id T-001 --title "..." [--provider claude] [--dep T-000
   for dep in ${deps[@]+"${deps[@]}"}; do
     valid_id "$dep" && [ "$dep" != "$id" ] || die $E_CONFLICT "invalid dependency: $dep"
   done
-  local dest="$HIVE_ROOT/tasks/prompts/$id.md"
+  local dest="$AISWARM_ROOT/tasks/prompts/$id.md"
   if task_file "$id" >/dev/null || [ -e "$dest" ]; then
     die $E_CONFLICT "task already exists: $id"
   fi
   # Prepare both files before exposing either. All adds hold the dispatch lock.
   local stage
-  stage=$(mktemp -d "$HIVE_ROOT/locks/add.XXXXXX")
+  stage=$(mktemp -d "$AISWARM_ROOT/locks/add.XXXXXX")
   if [ -n "$promptfile" ]; then
     cp "$promptfile" "$stage/prompt" || { rmdir "$stage"; return 1; }
   else cat > "$stage/prompt"; fi
@@ -276,7 +249,7 @@ cmd_add() { # hive add --id T-001 --title "..." [--provider claude] [--dep T-000
     rm -f "$stage/prompt" "$stage/task"; rmdir "$stage"; return 1
   fi
   mv "$stage/prompt" "$dest"
-  mv "$stage/task" "$HIVE_ROOT/tasks/ready/$id.json"
+  mv "$stage/task" "$AISWARM_ROOT/tasks/ready/$id.json"
   rmdir "$stage"
   event queued "$id" title="$title" provider="$provider"
   echo "$id"
@@ -284,7 +257,7 @@ cmd_add() { # hive add --id T-001 --title "..." [--provider claude] [--dep T-000
 
 ready_sorted() { # ids of ready tasks, best first
   local f
-  for f in "$HIVE_ROOT"/tasks/ready/*.json; do
+  for f in "$AISWARM_ROOT"/tasks/ready/*.json; do
     [ -e "$f" ] || return 0
     jq -r '[(.priority // 50 | tostring | if length < 6 then ("000000"[0:6-length]) + . else . end),
             (.created // ""), .id] | @tsv' "$f"
@@ -295,7 +268,7 @@ deps_ok() {
   local id="$1" d
   while read -r d; do
     [ -z "$d" ] && continue
-    [ -f "$HIVE_ROOT/tasks/done/$d.json" ] || return 1
+    [ -f "$AISWARM_ROOT/tasks/done/$d.json" ] || return 1
   done < <(tget "$id" '.depends_on[]?')
   return 0
 }
@@ -304,21 +277,21 @@ context_pack() { # everything every agent sees: shared blackboard state
   local id="$1"
   cat <<EOF
 <mission>
-$(cat "$HIVE_ROOT/context/MISSION.md")
+$(cat "$AISWARM_ROOT/context/MISSION.md")
 </mission>
 
 <interfaces>
-$(cat "$HIVE_ROOT/context/INTERFACES.md")
+$(cat "$AISWARM_ROOT/context/INTERFACES.md")
 </interfaces>
 
 <decisions>
-$(tail -40 "$HIVE_ROOT/context/DECISIONS.md")
+$(tail -40 "$AISWARM_ROOT/context/DECISIONS.md")
 </decisions>
 
 <upstream_results>
 $(while read -r d; do
     [ -z "$d" ] && continue
-    [ -f "$HIVE_ROOT/results/$d.md" ] && { echo "### $d"; cat "$HIVE_ROOT/results/$d.md"; echo; }
+    [ -f "$AISWARM_ROOT/results/$d.md" ] && { echo "### $d"; cat "$AISWARM_ROOT/results/$d.md"; echo; }
   done < <(tget "$id" '.depends_on[]?'))
 </upstream_results>
 EOF
@@ -341,7 +314,7 @@ $(cat "$(tget "$id" '.prompt')")
 1. Do only this task. If you discover work outside its scope, do not do it —
    record it under "Follow-ups" in your report.
 2. Do not edit files listed as owned by another task in <interfaces>.
-3. Before you finish, write your report to: $HIVE_ROOT/results/$id.md
+3. Before you finish, write your report to: $AISWARM_ROOT/results/$id.md
    using exactly these sections:
      ## Summary          (<=5 lines, what you changed and why)
      ## Files changed    (paths, one per line)
@@ -357,10 +330,10 @@ EOF
 
 prepare_dir() { # echo the working directory for a task (optionally a git worktree)
   local id="$1"
-  if [ "$(tget "$id" '.worktree')" = "true" ] && [ -n "$HIVE_WORKTREES" ] && have git; then
-    local wt="$HIVE_WORKTREES/$id"
+  if [ "$(tget "$id" '.worktree')" = "true" ] && [ -n "$AISWARM_WORKTREES" ] && have git; then
+    local wt="$AISWARM_WORKTREES/$id"
     if [ ! -d "$wt" ]; then
-      git worktree add -b "hive/$id" "$wt" >/dev/null 2>&1 || git worktree add "$wt" >/dev/null
+      git worktree add -b "aiswarm/$id" "$wt" >/dev/null 2>&1 || git worktree add "$wt" >/dev/null
     fi
     printf '%s' "$wt"
   else
@@ -373,16 +346,16 @@ run_provider() { # run_provider <provider> <rendered-prompt-file>  (stdout = tra
   case "$provider" in
     claude)
       claude -p "$(cat "$pf")" --output-format text \
-             --permission-mode acceptEdits --max-turns "$HIVE_MAX_TURNS" ;;
+             --permission-mode acceptEdits --max-turns "$AISWARM_MAX_TURNS" ;;
     codex)
       codex exec --skip-git-repo-check --sandbox workspace-write "$(cat "$pf")" ;;
     gemini)  gemini -p "$(cat "$pf")" ;;
     aider)   aider --yes --no-auto-commit --message-file "$pf" ;;
     cursor)  cursor-agent -p "$(cat "$pf")" ;;
     mock)    # dry-run provider: exercises the control plane, spends no tokens
-      echo "[mock] working on $(basename "$pf")"; sleep "${HIVE_MOCK_SLEEP:-2}"
+      echo "[mock] working on $(basename "$pf")"; sleep "${AISWARM_MOCK_SLEEP:-2}"
       printf '## Summary\nmock run of %s\n\n## Files changed\n(none)\n\n## Decisions\n(none)\n\n## Verification\nnone\n\n## Follow-ups\n(none)\n' \
-        "$(basename "$pf" .rendered.md)" > "$HIVE_ROOT/results/$(basename "$pf" .rendered.md).md"
+        "$(basename "$pf" .rendered.md)" > "$AISWARM_ROOT/results/$(basename "$pf" .rendered.md).md"
       echo "[mock] done" ;;
     *) die "unknown provider: $provider" ;;
   esac
@@ -390,11 +363,11 @@ run_provider() { # run_provider <provider> <rendered-prompt-file>  (stdout = tra
 
 cmd_exec() { # runs INSIDE the agent's tmux pane
   local id="$1"
-  export HIVE_ACTOR="$id"
+  export AISWARM_ACTOR="$id"
   local provider timeout rendered log rc=0
   provider=$(tget "$id" '.provider'); timeout=$(tget "$id" '.timeout')
-  rendered="$HIVE_ROOT/tasks/prompts/$id.rendered.md"
-  log="$HIVE_ROOT/logs/$id.log"
+  rendered="$AISWARM_ROOT/tasks/prompts/$id.rendered.md"
+  log="$AISWARM_ROOT/logs/$id.log"
   render_prompt "$id" > "$rendered"
   tset "$id" --argjson e "$(date -u +%s)" --arg ts "$(now)" --arg pane "${TMUX_PANE:-}" \
        '.started_at=$ts | .started_epoch=$e | .pane=$pane | .state="active"'
@@ -412,12 +385,12 @@ finish() { with_lock dispatch _finish "$@"; }
 
 _finish() {
   local id="$1" rc="$2" state=done glyph="✅" cost started dur
-  [ -f "$HIVE_ROOT/results/$id.md" ] || {
+  [ -f "$AISWARM_ROOT/results/$id.md" ] || {
       { echo "## Summary"; echo "(no structured report written by the agent)"; echo;
-        echo "## Raw tail"; tail -40 "$HIVE_ROOT/logs/$id.log" 2>/dev/null; } > "$HIVE_ROOT/results/$id.md"; }
+        echo "## Raw tail"; tail -40 "$AISWARM_ROOT/logs/$id.log" 2>/dev/null; } > "$AISWARM_ROOT/results/$id.md"; }
   if [ "$rc" -ne 0 ]; then state=failed; glyph="❌"; fi
   # best-effort cost: providers that emit JSON usually carry total_cost_usd
-  cost=$( { grep -o '"total_cost_usd":[0-9.]*' "$HIVE_ROOT/logs/$id.log" 2>/dev/null || true; } | tail -1 | cut -d: -f2 )
+  cost=$( { grep -o '"total_cost_usd":[0-9.]*' "$AISWARM_ROOT/logs/$id.log" 2>/dev/null || true; } | tail -1 | cut -d: -f2 )
   started=$(jq -r '.started_epoch // empty' "$(task_file "$id")" 2>/dev/null || true)
   dur=null; [ -n "$started" ] && dur=$(( $(date -u +%s) - started )) || true
   tset "$id" --argjson rc "$rc" --arg st "$state" --arg ts "$(now)" \
@@ -425,11 +398,11 @@ _finish() {
        --argjson cost "${cost:-null}" \
        '.rc=$rc | .state=$st | .ended_at=$ts | .ended_epoch=$e
         | .duration_s=$dur | .cost_usd=$cost' 2>/dev/null || true
-  mv "$HIVE_ROOT/tasks/active/$id.json" "$HIVE_ROOT/tasks/$state/$id.json" 2>/dev/null || true
+  mv "$AISWARM_ROOT/tasks/active/$id.json" "$AISWARM_ROOT/tasks/$state/$id.json" 2>/dev/null || true
   event "$state" "$id" rc="$rc" duration_s="${dur}" cost_usd="${cost:-}"
   [ -n "${TMUX:-}" ] && tmux rename-window -t "${TMUX_PANE:-}" "$glyph$id" 2>/dev/null || true
-  notify "hive: $id $state" "$(head -3 "$HIVE_ROOT/results/$id.md" | tail -1)"
-  have tmux && tmux wait-for -S "hive-$id" 2>/dev/null || true
+  notify "aiswarm: $id $state" "$(head -3 "$AISWARM_ROOT/results/$id.md" | tail -1)"
+  have tmux && tmux wait-for -S "aiswarm-$id" 2>/dev/null || true
   printf '\a'   # terminal bell -> tmux monitor-bell -> window flag
 }
 
@@ -437,23 +410,23 @@ spawn() {
   local id="$1" dir
   dir=$(prepare_dir "$id")
   tmux new-session -d -s "agent-$id" -c "$dir" \
-       -e HIVE_ROOT="$HIVE_ROOT" -e HIVE_SESSION="$HIVE_SESSION" -e HIVE_TASK="$id" \
+       -e AISWARM_ROOT="$AISWARM_ROOT" -e AISWARM_SESSION="$AISWARM_SESSION" -e AISWARM_TASK="$id" \
        "$SELF" exec "$id"
   tmux set-option -t "agent-$id" remain-on-exit on 2>/dev/null || true
-  tmux set-option -t "agent-$id" @hive_task "$id" 2>/dev/null || true
+  tmux set-option -t "agent-$id" @aiswarm_task "$id" 2>/dev/null || true
   tset "$id" --arg s "agent-$id" --arg d "$dir" '.session=$s | .dir=$d'
   event dispatched "$id" session="agent-$id" dir="$dir"
 }
 
 cmd_dispatch() {
-  [ -f "$HIVE_ROOT/paused" ] && return 0
+  [ -f "$AISWARM_ROOT/paused" ] && return 0
   local running id
-  running=$(count "$HIVE_ROOT"/tasks/active/*.json)
+  running=$(count "$AISWARM_ROOT"/tasks/active/*.json)
   while read -r id; do
     [ -n "$id" ] || continue
-    [ "$running" -ge "$HIVE_WIP" ] && break
+    [ "$running" -ge "$AISWARM_WIP" ] && break
     deps_ok "$id" || continue
-    mv "$HIVE_ROOT/tasks/ready/$id.json" "$HIVE_ROOT/tasks/active/$id.json"
+    mv "$AISWARM_ROOT/tasks/ready/$id.json" "$AISWARM_ROOT/tasks/active/$id.json"
     tset "$id" '.state="active"'
     spawn "$id"
     running=$((running+1))
@@ -461,21 +434,21 @@ cmd_dispatch() {
   return 0
 }
 
-cmd_pause()  { : > "$HIVE_ROOT/paused"; event paused ""; echo "scheduler paused"; }
-cmd_resume() { rm -f "$HIVE_ROOT/paused"; event resumed ""; echo "scheduler resumed"; }
+cmd_pause()  { : > "$AISWARM_ROOT/paused"; event paused ""; echo "scheduler paused"; }
+cmd_resume() { rm -f "$AISWARM_ROOT/paused"; event resumed ""; echo "scheduler resumed"; }
 
 cmd_reap() { with_lock dispatch _reap "$@"; }
 
 _reap() { # crash / orphan detection: active task whose session is gone
   local f id
-  for f in "$HIVE_ROOT"/tasks/active/*.json; do
+  for f in "$AISWARM_ROOT"/tasks/active/*.json; do
     [ -e "$f" ] || break
     id=$(basename "$f" .json)
     if ! tmux has-session -t "agent-$id" 2>/dev/null; then
       tset "$id" --arg ts "$(now)" '.state="failed" | .rc="orphaned" | .ended_at=$ts' 2>/dev/null || true
-      mv "$f" "$HIVE_ROOT/tasks/failed/$id.json"
+      mv "$f" "$AISWARM_ROOT/tasks/failed/$id.json"
       event failed "$id" rc=orphaned
-      notify "hive: $id orphaned" "agent session vanished"
+      notify "aiswarm: $id orphaned" "agent session vanished"
     fi
   done
 }
@@ -483,7 +456,7 @@ _reap() { # crash / orphan detection: active task whose session is gone
 _snapshot() { # one consistent JSON document describing the whole blackboard
   local st f live now_e; now_e=$(date -u +%s)
   { for st in ready active done failed; do
-      for f in "$HIVE_ROOT"/tasks/$st/*.json; do
+      for f in "$AISWARM_ROOT"/tasks/$st/*.json; do
         [ -e "$f" ] || break
         live=false
         tmux has-session -t "agent-$(basename "$f" .json)" 2>/dev/null && live=true
@@ -493,43 +466,43 @@ _snapshot() { # one consistent JSON document describing the whole blackboard
                              then ($now - .started_epoch) else .duration_s end)}' "$f"
       done
     done; } | jq -sc \
-      --arg root "$HIVE_ROOT" --arg session "$HIVE_SESSION" \
-      --argjson wip "$HIVE_WIP" --argjson tick "$HIVE_TICK" \
-      --argjson seq "$(cat "$HIVE_ROOT/seq" 2>/dev/null || echo 0)" \
-      --argjson paused "$([ -f "$HIVE_ROOT/paused" ] && echo true || echo false)" \
+      --arg root "$AISWARM_ROOT" --arg session "$AISWARM_SESSION" \
+      --argjson wip "$AISWARM_WIP" --argjson tick "$AISWARM_TICK" \
+      --argjson seq "$(cat "$AISWARM_ROOT/seq" 2>/dev/null || echo 0)" \
+      --argjson paused "$([ -f "$AISWARM_ROOT/paused" ] && echo true || echo false)" \
       '{api_version:2, capabilities:{atomic_add:true}, root:$root, session:$session, wip:$wip, tick:$tick, seq:$seq, paused:$paused,
         counts: (group_by(.state) | map({key: .[0].state, value: length}) | from_entries),
         tasks: .}'
 }
 
-cmd_json() { [ -d "$HIVE_ROOT/tasks/ready" ] || die $E_ENV "run hive init first"; with_lock dispatch _snapshot; }   # locked = never sees a half-moved task
+cmd_json() { [ -d "$AISWARM_ROOT/tasks/ready" ] || die $E_ENV "run aiswarm init first"; with_lock dispatch _snapshot; }   # locked = never sees a half-moved task
 
-cmd_show() { # hive show <id> [--with-result]
-  local id="${1:?usage: hive show <id>}" f res="/dev/null" live=false
+cmd_show() { # aiswarm show <id> [--with-result]
+  local id="${1:?usage: aiswarm show <id>}" f res="/dev/null" live=false
   f=$(task_file "$id") || json_err $E_NOTFOUND "no such task: $id"
   tmux has-session -t "agent-$id" 2>/dev/null && live=true
-  [ "${2:-}" = --with-result ] && [ -f "$HIVE_ROOT/results/$id.md" ] && res="$HIVE_ROOT/results/$id.md"
-  jq -c --arg r "$HIVE_ROOT" --argjson live "$live" --rawfile result "$res" \
+  [ "${2:-}" = --with-result ] && [ -f "$AISWARM_ROOT/results/$id.md" ] && res="$AISWARM_ROOT/results/$id.md"
+  jq -c --arg r "$AISWARM_ROOT" --argjson live "$live" --rawfile result "$res" \
      '. + {live:$live,
            result_path:($r+"/results/"+.id+".md"),
            log_path:($r+"/logs/"+.id+".log"),
            result:(if ($result|length)>0 then $result else null end)}' "$f"
 }
 
-cmd_tail() { # hive tail <id> [-f] [-n N]
+cmd_tail() { # aiswarm tail <id> [-f] [-n N]
   local id="$1"; shift || true
-  local f="$HIVE_ROOT/logs/$id.log"
+  local f="$AISWARM_ROOT/logs/$id.log"
   [ -f "$f" ] || die $E_NOTFOUND "no log for $id"
   case "${1:-}" in -f|--follow) tail -F "$f";; -n) tail -n "$2" "$f";; *) tail -n 200 "$f";; esac
 }
 
 cmd_peek() { # current screen of a live agent, colours preserved
-  local id="$1" n="${2:-$HIVE_PEEK_LINES}"
+  local id="$1" n="${2:-$AISWARM_PEEK_LINES}"
   tmux has-session -t "agent-$id" 2>/dev/null || die $E_NOTFOUND "no live session for $id"
   tmux capture-pane -p -e -S "-$n" -t "agent-$id:0.0"
 }
 
-cmd_set() { # hive set <id> key=value ...   (queued tasks only)
+cmd_set() { # aiswarm set <id> key=value ...   (queued tasks only)
   local id="$1"; shift
   [ "$(task_state "$id")" = ready ] || die $E_CONFLICT "$id is not in ready state"
   local kv k v
@@ -546,13 +519,13 @@ cmd_set() { # hive set <id> key=value ...   (queued tasks only)
   event edited "$id" fields="$*"
 }
 
-cmd_move() { # hive move <id> --before <other> | --first
+cmd_move() { # aiswarm move <id> --before <other> | --first
   local id="$1" pos="${2:-}" other="${3:-}" p
   [ "$(task_state "$id")" = ready ] || die $E_CONFLICT "$id is not in ready state"
   case "$pos" in
-    --first)  p=$(( $(jq -s 'map(.priority // 50) | min // 50' "$HIVE_ROOT"/tasks/ready/*.json) - 1 ));;
-    --before) p=$(( $(jq -r '.priority // 50' "$HIVE_ROOT/tasks/ready/$other.json" 2>/dev/null || echo 50) - 1 ));;
-    *) die 1 "usage: hive move <id> --before <other> | --first";;
+    --first)  p=$(( $(jq -s 'map(.priority // 50) | min // 50' "$AISWARM_ROOT"/tasks/ready/*.json) - 1 ));;
+    --before) p=$(( $(jq -r '.priority // 50' "$AISWARM_ROOT/tasks/ready/$other.json" 2>/dev/null || echo 50) - 1 ));;
+    *) die 1 "usage: aiswarm move <id> --before <other> | --first";;
   esac
   tset "$id" --argjson p "$p" '.priority = $p'
   event reordered "$id" priority="$p"
@@ -565,7 +538,7 @@ cmd_edit() { # open the prompt of a queued task in $EDITOR
   event edited "$id" field=prompt
 }
 
-cmd_events() { # hive events [--since N] [--follow] [--json]
+cmd_events() { # aiswarm events [--since N] [--follow] [--json]
   local since=0 follow=false line
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -575,7 +548,7 @@ cmd_events() { # hive events [--since N] [--follow] [--json]
       *) die 1 "unknown flag $1";;
     esac
   done
-  local file="$HIVE_ROOT/events.jsonl"
+  local file="$AISWARM_ROOT/events.jsonl"
   [ -f "$file" ] || die $E_NOTFOUND "no event log"
   if ! $follow; then
     jq -c --argjson s "$since" 'select(.seq > $s)' "$file"
@@ -591,12 +564,12 @@ cmd_events() { # hive events [--since N] [--follow] [--json]
 cmd_status() {
   [ "${1:-}" = --json ] && { cmd_json; return 0; }
   local st f id
-  printf '\n  \033[1mhive\033[0m  root=%s  wip=%s%s\n\n' "$HIVE_ROOT" "$HIVE_WIP" \
-    "$([ -f "$HIVE_ROOT/paused" ] && printf '  \033[33m[PAUSED]\033[0m')"
+  printf '\n  \033[1maiswarm\033[0m  root=%s  wip=%s%s\n\n' "$AISWARM_ROOT" "$AISWARM_WIP" \
+    "$([ -f "$AISWARM_ROOT/paused" ] && printf '  \033[33m[PAUSED]\033[0m')"
   printf '  %-8s %-8s %-9s %-7s %-6s %s\n' STATE ID PROVIDER SESSION TIME TITLE
   printf '  %s\n' "$(printf '─%.0s' $(seq 1 72))"
   for st in active ready done failed; do
-    for f in "$HIVE_ROOT"/tasks/$st/*.json; do
+    for f in "$AISWARM_ROOT"/tasks/$st/*.json; do
       [ -e "$f" ] || break
       id=$(basename "$f" .json)
       printf '  %-8s %-8s %-9s %-7s %-6s %s\n' "$st" "$id" \
@@ -608,14 +581,14 @@ cmd_status() {
     done
   done
   printf '\n  last events:\n'
-  tail -6 "$HIVE_ROOT/events.jsonl" 2>/dev/null | jq -r '"    \(.ts)  \(.type)\t\(.task)"' || true
+  tail -6 "$AISWARM_ROOT/events.jsonl" 2>/dev/null | jq -r '"    \(.ts)  \(.type)\t\(.task)"' || true
   echo
 }
 
 cmd_statusline() {
   printf 'R:%s A:%s ✓%s ✗%s' \
-    "$(count "$HIVE_ROOT"/tasks/ready/*.json)"  "$(count "$HIVE_ROOT"/tasks/active/*.json)" \
-    "$(count "$HIVE_ROOT"/tasks/done/*.json)"   "$(count "$HIVE_ROOT"/tasks/failed/*.json)"
+    "$(count "$AISWARM_ROOT"/tasks/ready/*.json)"  "$(count "$AISWARM_ROOT"/tasks/active/*.json)" \
+    "$(count "$AISWARM_ROOT"/tasks/done/*.json)"   "$(count "$AISWARM_ROOT"/tasks/failed/*.json)"
 }
 
 cmd_loop() { # the control cycle: dispatch -> reap -> render, forever
@@ -623,7 +596,7 @@ cmd_loop() { # the control cycle: dispatch -> reap -> render, forever
     with_lock dispatch cmd_dispatch
     cmd_reap
     clear; cmd_status
-    sleep "$HIVE_TICK"
+    sleep "$AISWARM_TICK"
   done
 }
 
@@ -632,25 +605,25 @@ cmd_send() { # push a prompt into a live REPL agent without attaching
   local text="$*"; [ -n "$text" ] || text=$(cat)
   local pane="agent-$id:0.0"
   tmux has-session -t "agent-$id" 2>/dev/null || die "no session agent-$id"
-  printf '%s' "$text" | tmux load-buffer -b hive-send -
-  tmux paste-buffer -d -p -b hive-send -t "$pane"   # -p = bracketed paste, keeps newlines
+  printf '%s' "$text" | tmux load-buffer -b aiswarm-send -
+  tmux paste-buffer -d -p -b aiswarm-send -t "$pane"   # -p = bracketed paste, keeps newlines
   sleep 0.3
   tmux send-keys -t "$pane" Enter
   event message "$id" text="$(cut -c1-80 <<<"$text")"
 }
 
-cmd_wait() { tmux wait-for "hive-$1"; }          # block until task $1 signals
+cmd_wait() { tmux wait-for "aiswarm-$1"; }          # block until task $1 signals
 cmd_watchwt() { tmux switch-client -t "agent-$1" 2>/dev/null || tmux attach -t "agent-$1"; }
 
 cmd_up() {
-  tmux has-session -t "$HIVE_SESSION" 2>/dev/null && { echo "already up"; return; }
-  tmux new-session  -d -s "$HIVE_SESSION" -n orchestrator -c "$PWD" -e HIVE_ROOT="$HIVE_ROOT"
-  tmux new-window   -d -t "$HIVE_SESSION" -n board  -c "$PWD" -e HIVE_ROOT="$HIVE_ROOT" "$SELF" loop
-  tmux new-window   -d -t "$HIVE_SESSION" -n journal -c "$PWD" \
-       "tail -f '$HIVE_ROOT/events.jsonl' | jq -r --unbuffered '\"\(.ts) \(.type) \(.task) \(.title // .rc // \"\")\"'"
-  tmux set-option -t "$HIVE_SESSION" status-right "#[fg=cyan]#($SELF statusline)#[default] %H:%M "
-  tmux set-option -t "$HIVE_SESSION" status-interval 2
-  echo "control session '$HIVE_SESSION' is up — tmux attach -t $HIVE_SESSION"
+  tmux has-session -t "$AISWARM_SESSION" 2>/dev/null && { echo "already up"; return; }
+  tmux new-session  -d -s "$AISWARM_SESSION" -n orchestrator -c "$PWD" -e AISWARM_ROOT="$AISWARM_ROOT"
+  tmux new-window   -d -t "$AISWARM_SESSION" -n board  -c "$PWD" -e AISWARM_ROOT="$AISWARM_ROOT" "$SELF" loop
+  tmux new-window   -d -t "$AISWARM_SESSION" -n journal -c "$PWD" \
+       "tail -f '$AISWARM_ROOT/events.jsonl' | jq -r --unbuffered '\"\(.ts) \(.type) \(.task) \(.title // .rc // \"\")\"'"
+  tmux set-option -t "$AISWARM_SESSION" status-right "#[fg=cyan]#($SELF statusline)#[default] %H:%M "
+  tmux set-option -t "$AISWARM_SESSION" status-interval 2
+  echo "control session '$AISWARM_SESSION' is up — tmux attach -t $AISWARM_SESSION"
 }
 
 cmd_down() {
@@ -658,8 +631,8 @@ cmd_down() {
   while read -r s; do
     [ -n "$s" ] && tmux kill-session -t "$s" 2>/dev/null || true
   done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^agent-' || true)
-  tmux kill-session -t "$HIVE_SESSION" 2>/dev/null || true
-  echo "all hive sessions killed"
+  tmux kill-session -t "$AISWARM_SESSION" 2>/dev/null || true
+  echo "all aiswarm sessions killed"
 }
 
 cmd_kill() { with_lock dispatch _kill "$@"; }
@@ -669,7 +642,7 @@ _kill() { # cancel a running agent, return its task to the queue
   valid_id "$id" || die $E_CONFLICT "invalid task id: $id"
   [ "$(task_state "$id")" = active ] || die $E_CONFLICT "$id is not active"
   tmux kill-session -t "agent-$id" 2>/dev/null || true
-  [ -f "$HIVE_ROOT/tasks/active/$id.json" ] && mv "$HIVE_ROOT/tasks/active/$id.json" "$HIVE_ROOT/tasks/ready/$id.json"
+  [ -f "$AISWARM_ROOT/tasks/active/$id.json" ] && mv "$AISWARM_ROOT/tasks/active/$id.json" "$AISWARM_ROOT/tasks/ready/$id.json"
   tset "$id" '.state="ready" | .started_at=null | .started_epoch=null
     | .ended_at=null | .ended_epoch=null | .duration_s=null | .rc=null | .session=null'
   event cancelled "$id"
@@ -679,7 +652,7 @@ cmd_gc() { # close the tmux sessions of finished agents, keep their logs
   local s id
   while read -r s; do
     id=${s#agent-}
-    [ -f "$HIVE_ROOT/tasks/done/$id.json" ] || [ -f "$HIVE_ROOT/tasks/failed/$id.json" ] \
+    [ -f "$AISWARM_ROOT/tasks/done/$id.json" ] || [ -f "$AISWARM_ROOT/tasks/failed/$id.json" ] \
       && tmux kill-session -t "$s" 2>/dev/null || true
   done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^agent-' || true)
 }
@@ -698,8 +671,8 @@ cmd_doctor() {
            --argjson timeout "$(have timeout && echo true || echo false)" \
            --argjson git "$(have git && echo true || echo false)" \
            --arg nvim "$(_nvim_bin 2>/dev/null || true)" \
-           --arg schema "$(_board_schema)" --arg root_path "$HIVE_ROOT" --arg version "$AISWARM_VERSION" \
-           --argjson root "$([ -d "$HIVE_ROOT" ] && echo true || echo false)" \
+           --arg schema "$(_board_schema)" --arg root_path "$AISWARM_ROOT" --arg version "$AISWARM_VERSION" \
+           --argjson root "$([ -d "$AISWARM_ROOT" ] && echo true || echo false)" \
            --argjson providers "$(for p in claude codex gemini aider cursor-agent; do
                  have "$p" && printf '"%s"\n' "$p"; done | jq -sc .)" \
            '{api_version:2, version:$version, capabilities:{atomic_add:true}, locking:"mkdir", tmux:$tmux, jq:$jq, timeout:$timeout, git:$git,
@@ -712,38 +685,38 @@ cmd_doctor() {
   _nvim_bin >/dev/null 2>&1 && echo "  ✓ nvim $(_nvim_bin) (v3 runtime)" || echo "  ✗ nvim missing (v3 boards unavailable)"
   have tmux && echo "  · $(tmux -V)"
   for p in claude codex gemini aider cursor-agent; do have "$p" && echo "  ✓ provider: $p"; done
-  [ -d "$HIVE_ROOT" ] && echo "  ✓ board $HIVE_ROOT ($(_board_schema))" || echo "  ✗ run 'aiswarm init'"
+  [ -d "$AISWARM_ROOT" ] && echo "  ✓ board $AISWARM_ROOT ($(_board_schema))" || echo "  ✗ run 'aiswarm init'"
   return $ok
 }
 
 usage() { sed -n '2,18p' "$SELF"; cat <<'EOF'
 
   (v2 boards; run `aiswarm help` on a v3 board for the v3 command set)
-  hive init                       scaffold the blackboard in ./.hive
-  hive up | down                  start/stop the control session
-  hive add --id T-1 [flags] <prompt on stdin>
-  hive dispatch | loop            one scheduling pass / continuous control cycle
-  hive status [--json]            human table / full machine-readable snapshot
-  hive json | dump                same as `status --json` (locked snapshot)
-  hive show  <id> [--with-result] one task as JSON
-  hive events [--since N] [-f]    sequenced event stream (JSON lines)
-  hive tail  <id> [-f|-n N]       agent transcript
-  hive peek  <id> [lines]         current screen of a live agent
-  hive pause | resume              stop / restart the scheduler
-  hive set   <id> key=value ...   edit a queued task
-  hive move  <id> --before <id2> | --first
-  hive edit  <id>                 open a queued task's prompt in $EDITOR
-  hive progress <id> [note]       heartbeat from a hook
-  hive statusline                 tmux status-right widget
-  hive exec  <id>                 (internal) run one task in the current pane
-  hive send  <id> "text"          inject a prompt into a live REPL agent
-  hive wait  <id>                 block until <id> finishes (tmux wait-for)
-  hive go    <id>                 switch the client to that agent's session
-  hive event <type> <id> k=v...   append to the journal (use from hooks)
-  hive notify "title" "body"      desktop toast through tmux
-  hive kill  <id>                 cancel an agent and requeue its task
-  hive gc                         close finished agents' sessions
-  hive reap | doctor | pick
+  aiswarm init                       scaffold the blackboard in ./.aiswarm
+  aiswarm up | down                  start/stop the control session
+  aiswarm add --id T-1 [flags] <prompt on stdin>
+  aiswarm dispatch | loop            one scheduling pass / continuous control cycle
+  aiswarm status [--json]            human table / full machine-readable snapshot
+  aiswarm json | dump                same as `status --json` (locked snapshot)
+  aiswarm show  <id> [--with-result] one task as JSON
+  aiswarm events [--since N] [-f]    sequenced event stream (JSON lines)
+  aiswarm tail  <id> [-f|-n N]       agent transcript
+  aiswarm peek  <id> [lines]         current screen of a live agent
+  aiswarm pause | resume              stop / restart the scheduler
+  aiswarm set   <id> key=value ...   edit a queued task
+  aiswarm move  <id> --before <id2> | --first
+  aiswarm edit  <id>                 open a queued task's prompt in $EDITOR
+  aiswarm progress <id> [note]       heartbeat from a hook
+  aiswarm statusline                 tmux status-right widget
+  aiswarm exec  <id>                 (internal) run one task in the current pane
+  aiswarm send  <id> "text"          inject a prompt into a live REPL agent
+  aiswarm wait  <id>                 block until <id> finishes (tmux wait-for)
+  aiswarm go    <id>                 switch the client to that agent's session
+  aiswarm event <type> <id> k=v...   append to the journal (use from hooks)
+  aiswarm notify "title" "body"      desktop toast through tmux
+  aiswarm kill  <id>                 cancel an agent and requeue its task
+  aiswarm gc                         close finished agents' sessions
+  aiswarm reap | doctor | pick
 EOF
 }
 
@@ -757,17 +730,15 @@ main() {
     v3) _run_v3 "$cmd" "$@";;
     v2) case "$cmd" in migrate|snapshot|stream|ack|logs|cancel|retry|scheduler|reconcile|attach) _run_v3 "$cmd" "$@";; esac;;
     missing)
-      # No board yet. Under the legacy `hive` name (or AISWARM_LEGACY_INIT=1) the v2 code answers so
-      # old scripts keep their documented behavior (`hive init` creates a .hive v2 board). Under the
-      # canonical name the v3 runtime answers: `aiswarm init` creates a v3 board, reads report missing.
-      if [ "${AISWARM_INVOKED_AS:-}" = hive ] || [ "${AISWARM_LEGACY_INIT:-}" = 1 ]; then
-        [ "$cmd" = init ] && [ -z "${AISWARM_QUIET_LEGACY:-}" ] && printf 'aiswarm: creating a legacy v2 board because you ran `hive init`; `aiswarm init` creates a v3 board\n' >&2
+      # The v2 initializer is retained only for explicit schema fixtures/import workflows.
+      if [ "${AISWARM_LEGACY_INIT:-}" = 1 ]; then
+        :
       elif _v3_runtime && _nvim_bin >/dev/null 2>&1; then
         _run_v3 "$cmd" "$@"
       fi;;
   esac
   case "$cmd" in
-    --version|version) echo "hive 2.1.0-dev (atomic-add)";;
+    --version|version) echo "aiswarm 2.1.0-dev (atomic-add)";;
     init) cmd_init "$@";;
     up) cmd_up "$@";; down) cmd_down "$@";;
     add) with_lock dispatch cmd_add "$@";;

@@ -1,5 +1,7 @@
 # aiswarm core release checklist (SDD-100)
 
+Status: **reopened on 2026-09-14.** The rows below record the historical claims made when SDD-100 was first closed. The [implementation audit](aiswarm-implementation-audit.md) found that the cited automated artifacts no longer exist and that twenty defects remain; release acceptance is governed by the [remediation SDD plan](aiswarm-remediation-sdd-plan.md) (SDD-145/146) until this checklist is reconciled again.
+
 Every requirement row of the plan maps to passing evidence in `docs/aiswarm-evidence/` (`ledger.md` for automated records, `manual/` for reviewed records). `bash scripts/validate-aiswarm-plan.sh` checks that every checked task has a passing record and that dependencies are complete.
 
 | Requirement | Evidence | Status |

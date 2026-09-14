@@ -236,7 +236,7 @@ return {
     t:wait(10000, function() local a = attempts_of(snapshot(t, root), "T-001")[1]; return a and a.worker ~= nil end)
     local k = v3.cli(root, { "kill", "T-001", "--json" }, { env = env }); t:eq(k.code, 0, k.stderr); t:match(k.stderr, "legacy meaning")
     local snap = snapshot(t, root)
-    t:eq(task_of(snap, "T-001").state, "queued", "HiveKill semantics: requeued exactly once")
+    t:eq(task_of(snap, "T-001").state, "queued", "AISwarmKill semantics: requeued exactly once")
     t:eq(#attempts_of(snap, "T-001"), 1); t:eq(attempts_of(snap, "T-001")[1].state, "cancelled")
     -- canonical cancel afterwards does not requeue
     local c = v3.cli_json(t, root, { "cancel", "T-001" }); t:eq(c.task.state, "cancelled")

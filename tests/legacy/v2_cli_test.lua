@@ -1,17 +1,17 @@
--- SDD-002: characterization of the legacy `hive` (v2) backend. Cases named
+-- SDD-002: characterization of the legacy `aiswarm` (v2) backend. Cases named
 -- legacy.quirk.* document audited defects as CURRENT behavior; they are not
 -- v3 acceptance tests and must be rewritten when the owning v3 task lands.
 local sb = require("helpers.sandbox")
 
 local function snapshot(t, root)
-  local r = sb.hive(root, { "json" })
+  local r = sb.aiswarm(root, { "json" })
   t:eq(r.code, 0, r.stderr)
   local snap = sb.json(r.stdout)
   t:ok(snap, "snapshot decodes")
   return snap
 end
 local function events(t, root)
-  local r = sb.hive(root, { "events" })
+  local r = sb.aiswarm(root, { "events" })
   t:eq(r.code, 0, r.stderr)
   local out = {}
   for line in r.stdout:gmatch("[^\n]+") do out[#out + 1] = sb.json(line) end
@@ -33,11 +33,11 @@ end
 
 return {
   { id = "legacy.cli.version_and_doctor", tasks = { "SDD-002" }, suites = { "core", "legacy", "compatibility" }, run = function(t)
-    local root = t:tmpdir("nb") .. "/.hive"
-    local v = sb.hive(root, { "--version" }); t:eq(v.code, 0); t:match(v.stdout, "2%.1%.0") -- the launcher is now aiswarm; v2 compatibility version stays visible
-    local d = sb.hive(root, { "doctor", "--json" }); t:eq(d.code, 0)
+    local root = sb.legacy_board(t, "doctor-v2")
+    local v = sb.aiswarm(root, { "--version" }); t:eq(v.code, 0); t:match(v.stdout, "2%.1%.0") -- the launcher is now aiswarm; v2 compatibility version stays visible
+    local d = sb.aiswarm(root, { "doctor", "--json" }); t:eq(d.code, 0)
     local doc = sb.json(d.stdout)
-    t:eq(doc.api_version, 2); t:eq(doc.capabilities.atomic_add, true); t:eq(doc.locking, "mkdir"); t:eq(doc.blackboard, false)
+    t:eq(doc.api_version, 2); t:eq(doc.capabilities.atomic_add, true); t:eq(doc.locking, "mkdir"); t:eq(doc.blackboard, true)
   end },
   { id = "legacy.cli.snapshot_api_v2_shape", tasks = { "SDD-002" }, suites = { "core", "legacy", "compatibility" }, run = function(t)
     local root = sb.legacy_board(t)
@@ -55,7 +55,7 @@ return {
     local root = sb.legacy_board(t)
     t:eq(sb.legacy_add(t, root, {}, "a\n"), "T-001")
     t:eq(sb.legacy_add(t, root, {}, "b\n"), "T-002")
-    local dup = sb.hive(root, { "add", "--id", "T-001" }, { stdin = "x\n" })
+    local dup = sb.aiswarm(root, { "add", "--id", "T-001" }, { stdin = "x\n" })
     t:eq(dup.code, 3, "duplicate id is a conflict (exit 3)"); t:match(dup.stderr, "already exists")
     t:eq(snapshot(t, root).tasks[1].title, "a", "title defaults to the first prompt line")
   end },
@@ -64,22 +64,22 @@ return {
     sb.legacy_add(t, root, {}, "a\n"); sb.legacy_add(t, root, {}, "b\n")
     local ev = events(t, root)
     t:eq(#ev, 2); t:eq(ev[1].seq, 1); t:eq(ev[2].seq, 2); t:eq(ev[2].type, "queued"); t:eq(ev[2].task, "T-002")
-    local since = sb.hive(root, { "events", "--since", "1" }); t:eq(select(2, since.stdout:gsub("\n", "")), 1)
+    local since = sb.aiswarm(root, { "events", "--since", "1" }); t:eq(select(2, since.stdout:gsub("\n", "")), 1)
     t:eq(vim.trim(sb.read(root .. "/seq")), "2")
   end },
   { id = "legacy.cli.pause_resume_and_exit_codes", tasks = { "SDD-002" }, suites = { "core", "legacy" }, run = function(t)
     local root = sb.legacy_board(t)
-    t:eq(sb.hive(root, { "pause" }).code, 0); t:eq(snapshot(t, root).paused, true)
-    t:eq(sb.hive(root, { "resume" }).code, 0); t:eq(snapshot(t, root).paused, false)
-    t:eq(sb.hive(root, { "show", "NOPE" }).code, 2, "not found is exit 2")
-    t:eq(sb.hive(root, { "kill", "NOPE" }).code, 3, "wrong state is exit 3 (validated id)")
-    t:eq(sb.hive(t:tmpdir("nb") .. "/.hive", { "json" }).code, 4, "missing board is exit 4")
+    t:eq(sb.aiswarm(root, { "pause" }).code, 0); t:eq(snapshot(t, root).paused, true)
+    t:eq(sb.aiswarm(root, { "resume" }).code, 0); t:eq(snapshot(t, root).paused, false)
+    t:eq(sb.aiswarm(root, { "show", "NOPE" }).code, 2, "not found is exit 2")
+    t:eq(sb.aiswarm(root, { "kill", "NOPE" }).code, 3, "wrong state is exit 3 (validated id)")
+    t:eq(sb.aiswarm(t:tmpdir("nb") .. "/.aiswarm", { "json" }).code, 4, "missing board is exit 4")
   end },
   { id = "legacy.cli.mock_exec_lifecycle", tasks = { "SDD-002" }, suites = { "core", "legacy" }, run = function(t)
     local root = sb.legacy_board(t)
     sb.legacy_add(t, root, { "--id", "T-001" }, "mock me\n")
     force_active(root, "T-001")
-    local r = sb.hive(root, { "exec", "T-001" }, { timeout = 15000 })
+    local r = sb.aiswarm(root, { "exec", "T-001" }, { timeout = 15000 })
     t:eq(r.code, 0, r.stderr)
     local snap = snapshot(t, root)
     t:eq(snap.tasks[1].state, "done"); t:eq(snap.tasks[1].rc, 0); t:eq(snap.tasks[1].cost_usd, nil, "cost is null, not zero")
@@ -90,14 +90,14 @@ return {
   { id = "legacy.quirk.no_automatic_progress", tasks = { "SDD-002" }, suites = { "core", "legacy" }, run = function(t)
     local root = sb.legacy_board(t)
     sb.legacy_add(t, root, { "--id", "T-001" }, "mock me\n"); force_active(root, "T-001")
-    sb.hive(root, { "exec", "T-001" }, { timeout = 15000 })
+    sb.aiswarm(root, { "exec", "T-001" }, { timeout = 15000 })
     for _, e in ipairs(events(t, root)) do t:neq(e.type, "progress", "legacy runner emits no automatic progress") end
-    t:log("LEGACY QUIRK A07: no heartbeat/progress without an explicit `hive progress` call")
+    t:log("LEGACY QUIRK A07: no heartbeat/progress without an explicit `aiswarm progress` call")
   end },
   { id = "legacy.quirk.kill_requeues", tasks = { "SDD-002" }, suites = { "core", "legacy", "compatibility" }, run = function(t)
     local root = sb.legacy_board(t)
     sb.legacy_add(t, root, { "--id", "T-001" }, "x\n"); force_active(root, "T-001")
-    local r = sb.hive(root, { "kill", "T-001" }); t:eq(r.code, 0, r.stderr)
+    local r = sb.aiswarm(root, { "kill", "T-001" }); t:eq(r.code, 0, r.stderr)
     local task = snapshot(t, root).tasks[1]
     t:eq(task.state, "ready", "LEGACY QUIRK A08: kill returns the task to the queue"); t:eq(task.rc, nil); t:eq(task.session, nil)
     local ev = events(t, root); t:eq(ev[#ev].type, "cancelled")
@@ -108,7 +108,7 @@ return {
     sb.write(root .. "/results/T-001.md", "STALE PRIOR ATTEMPT\n")
     force_active(root, "T-001")
     local path = stub_provider(t, "codex", 'echo "stub codex ran"; exit 0')
-    local r = sb.hive(root, { "exec", "T-001" }, { env = { PATH = path }, timeout = 15000 })
+    local r = sb.aiswarm(root, { "exec", "T-001" }, { env = { PATH = path }, timeout = 15000 })
     t:eq(r.code, 0, r.stderr)
     t:eq(snapshot(t, root).tasks[1].state, "done")
     t:eq(sb.read(root .. "/results/T-001.md"), "STALE PRIOR ATTEMPT\n", "LEGACY QUIRK A09: predecessor report is kept as this run's report")
@@ -121,14 +121,14 @@ return {
   { id = "legacy.quirk.move_first_negative_priority", tasks = { "SDD-002" }, suites = { "core", "legacy" }, run = function(t)
     local root = sb.legacy_board(t)
     sb.legacy_add(t, root, { "--id", "T-001", "--priority", "0" }, "x\n"); sb.legacy_add(t, root, { "--id", "T-002" }, "y\n")
-    t:eq(sb.hive(root, { "move", "T-002", "--first" }).code, 0)
+    t:eq(sb.aiswarm(root, { "move", "T-002", "--first" }).code, 0)
     local snap = snapshot(t, root)
     for _, task in ipairs(snap.tasks) do if task.id == "T-002" then t:eq(task.priority, -1, "LEGACY QUIRK A23: move-first produces -1") end end
   end },
   { id = "legacy.quirk.set_accepts_invalid_values", tasks = { "SDD-002" }, suites = { "core", "legacy" }, run = function(t)
     local root = sb.legacy_board(t)
     sb.legacy_add(t, root, { "--id", "T-001" }, "x\n")
-    t:eq(sb.hive(root, { "set", "T-001", "provider=not-a-provider", "timeout=-1" }).code, 0)
+    t:eq(sb.aiswarm(root, { "set", "T-001", "provider=not-a-provider", "timeout=-1" }).code, 0)
     local task = snapshot(t, root).tasks[1]
     t:eq(task.provider, "not-a-provider", "LEGACY QUIRK A22: set skips creation validation"); t:eq(task.timeout, -1)
   end },

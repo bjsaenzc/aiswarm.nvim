@@ -119,10 +119,6 @@ function M.apply_control(rec, opts)
     end
     local ok, err = pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "AISwarmEvent", data = rec })
     if not ok then A().err("AISwarmEvent callback failed: " .. tostring(err)) end
-    if A().config.compat.hive_events then
-      local e = require("aiswarm.runtime.compat").v2_event(rec)
-      if e then require("aiswarm.compat").emit_hive_event(e) end
-    end
     emit("event", rec)
   end
   return applied
@@ -305,7 +301,7 @@ function M.statusline()
   return ("%sR:%d A:%d ✓%d ✗%d"):format(store.scheduler.paused and "⏸ " or "", c.queued, c.running, c.states.succeeded or 0, (c.states.failed or 0) + (c.states.cancelled or 0))
 end
 
---- Compatibility push bridge (SDD-090): a low-volume control event pushed by aiswarm-push/hive-push
+--- Compatibility push bridge (SDD-090): a low-volume control event pushed by aiswarm-push
 --- shares the stream's identity, so it deduplicates against the stream and only triggers reconciliation.
 function M.on_event(e)
   if M._stopped or type(e) ~= "table" or type(e.seq) ~= "number" or e.seq < 1 then return false end

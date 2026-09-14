@@ -5,11 +5,7 @@ return {
   name = "aiswarm.nvim",
   main = "aiswarm",
   dependencies = { "folke/snacks.nvim" },
-  cmd = {
-    "AISwarm",
-    -- legacy aliases (compat.hive_commands)
-    "Hive", "HivePick", "HiveAdd", "HiveResults", "HiveTail", "HivePeek", "HiveGo", "HiveKill", "HivePause", "HiveRefresh",
-  },
+  cmd = { "AISwarm" },
   keys = {
     { "<leader>Aa", "<cmd>AISwarm<cr>", desc = "AI swarm: workspace" },
     { "<leader>Ap", "<cmd>AISwarm pick<cr>", desc = "AI swarm: search tasks" },

@@ -13,7 +13,7 @@ SNACKS="${AISWARM_TEST_SNACKS:-$HOME/.local/share/nvim/lazy/snacks.nvim}"
 SOCK="aiswarm-shot-$$"
 SOCKDIR="$(mktemp -d /tmp/aisw-shot.XXXXXX)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/aiswarm-shot.XXXXXX")"
-export TMUX_TMPDIR="$SOCKDIR" AISWARM_TMUX_SOCKET="$SOCK" AISWARM_QUIET_LEGACY=1 AISWARM_NVIM="$NVIM_BIN"
+export TMUX_TMPDIR="$SOCKDIR" AISWARM_TMUX_SOCKET="$SOCK" AISWARM_NVIM="$NVIM_BIN"
 export AISWARM_PROVIDER_EXEC_mock="$PLUGIN/tests/fixtures/providers/fake-provider" AISWARM_FAKE_TICK_MS=50 AISWARM_FAKE_PROGRESS="$PLUGIN/bin/aiswarm-progress"
 T() { tmux -L "$SOCK" "$@"; }
 cleanup() { T kill-server >/dev/null 2>&1 || true; pkill -9 -f "runtime/worker.lua --root $WORK" >/dev/null 2>&1 || true; rm -rf "$SOCKDIR"; }

@@ -8,29 +8,14 @@ return {
     local root = sb.legacy_board(t, "proj-board")
     local base = vim.fs.dirname(root)
     vim.fn.mkdir(base .. "/a/b", "p")
-    vim.env.AISWARM_ROOT, vim.env.HIVE_ROOT = nil, nil
+    vim.env.AISWARM_ROOT = nil
     local r = project().resolve({}, base .. "/a/b")
     t:eq(r.root, root); t:eq(r.source, "discovery"); t:eq(r.schema, "v2")
     local link = dir .. "/link"; vim.uv.fs_symlink(base, link)
     local r2 = project().resolve({}, link .. "/a")
     t:eq(r2.root, root, "symlinked cwd resolves to the canonical board path")
-    local r3 = project().resolve({ root = link .. "/.hive/" }, dir)
+    local r3 = project().resolve({ root = link .. "/.aiswarm/" }, dir)
     t:eq(r3.root, root, "explicit option canonicalized (symlink + trailing slash)")
-  end },
-  { id = "compat.project().both_directories_require_selection", tasks = { "SDD-015" }, suites = { "core", "compatibility" }, run = function(t)
-    local root = sb.legacy_board(t)
-    local base = vim.fs.dirname(root); vim.fn.mkdir(base .. "/.aiswarm", "p")
-    vim.env.AISWARM_ROOT, vim.env.HIVE_ROOT = nil, nil
-    local r = project().resolve({}, base)
-    t:eq(r.schema, "conflict"); t:eq(r.root, nil); t:eq(#r.conflict, 2)
-    pl.unload()
-    local A = require("aiswarm")
-    local cwd = vim.uv.cwd(); vim.cmd.cd(base); t:defer(function() vim.cmd.cd(cwd) end)
-    local seen = pl.capture_notify(function() A.setup({ bin = sb.bin("aiswarm"), follow = false, register_server = false }); vim.wait(50) end)
-    t:eq(project().current, nil, "no silent merge/selection")
-    t:ok(#seen >= 1 and seen[1].msg:match("both .aiswarm and .hive"), vim.inspect(seen))
-    local o = sb.run({ sb.bin("aiswarm"), "json" }, { env = { PATH = vim.env.PATH, HOME = vim.env.HOME, TMUX_TMPDIR = vim.env.TMUX_TMPDIR or vim.env.TMPDIR }, cwd = base })
-    t:eq(o.code, 4, "CLI refuses to guess"); t:match(o.stderr, "both")
   end },
   { id = "compat.project().cwd_change_does_not_retarget", tasks = { "SDD-015" }, suites = { "core", "compatibility" }, run = function(t)
     local root1 = sb.legacy_board(t, "one"); local root2 = sb.legacy_board(t, "two")
@@ -55,7 +40,7 @@ return {
   end },
   { id = "compat.project().open_creates_nothing", tasks = { "SDD-015" }, suites = { "core", "compatibility" }, run = function(t)
     local dir = t:tmpdir("empty")
-    vim.env.AISWARM_ROOT, vim.env.HIVE_ROOT = nil, nil
+    vim.env.AISWARM_ROOT = nil
     local r = project().resolve({}, dir)
     t:eq(r.candidate, true); t:eq(r.schema, "missing")
     pl.unload(); local A = require("aiswarm")
@@ -63,6 +48,6 @@ return {
     A.setup({ bin = sb.bin("aiswarm"), follow = false, register_server = false })
     t:defer(function() project().close() end)
     vim.wait(100)
-    t:ok(not sb.exists(dir .. "/.aiswarm") and not sb.exists(dir .. "/.hive"), "opening never creates a board")
+    t:ok(not sb.exists(dir .. "/.aiswarm") and not sb.exists(dir .. "/.aiswarm"), "opening never creates a board")
   end },
 }

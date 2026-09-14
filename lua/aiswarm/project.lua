@@ -1,5 +1,5 @@
 -- Explicit project/board session ownership (SDD-015).
--- Root precedence: explicit option → AISWARM_ROOT → HIVE_ROOT → discovered board in the
+-- Root precedence: explicit option → AISWARM_ROOT → discovered board in the
 -- cwd's ancestors → candidate <git root or cwd>/.aiswarm (never created here).
 local M = { generation = 0, current = nil }
 local config = require("aiswarm.config")
@@ -28,16 +28,13 @@ function M.schema(root)
   return "invalid"
 end
 
---- Walk ancestors of `dir` for .aiswarm / .hive boards.
----@return { kind: "aiswarm"|"hive"|"conflict"|"none", root?: string, candidates: string[], dir?: string }
+--- Walk ancestors of `dir` for .aiswarm boards.
+---@return { kind: "aiswarm"|"none", root?: string, candidates: string[], dir?: string }
 function M.discover(dir)
   dir = M.canonical(dir or vim.uv.cwd())
   for d in vim.fs.parents(dir .. "/.") do
-    local a, h = d .. "/.aiswarm", d .. "/.hive"
-    local has_a, has_h = vim.fn.isdirectory(a) == 1, vim.fn.isdirectory(h) == 1
-    if has_a and has_h then return { kind = "conflict", candidates = { a, h }, dir = d } end
-    if has_a then return { kind = "aiswarm", root = a, candidates = { a }, dir = d } end
-    if has_h then return { kind = "hive", root = h, candidates = { h }, dir = d } end
+    local a = d .. "/.aiswarm"
+    if vim.fn.isdirectory(a) == 1 then return { kind = "aiswarm", root = a, candidates = { a }, dir = d } end
   end
   return { kind = "none", candidates = {} }
 end
@@ -50,22 +47,20 @@ function M.git_root(dir)
 end
 
 --- Resolve the board for a configuration without side effects.
----@return { root: string?, source: string, schema: string, conflict?: string[], candidate?: boolean }
+---@return { root: string?, source: string, schema: string, candidate?: boolean }
 function M.resolve(cfg, cwd)
   cfg = cfg or {}
   if cfg.root then
     local root = M.canonical(cfg.root)
     return { root = root, source = "option", schema = M.schema(root) }
   end
-  local env, source = config.env("AISWARM_ROOT", "HIVE_ROOT")
+  local env, source = config.env("AISWARM_ROOT")
   if env then
     local root = M.canonical(env)
     return { root = root, source = source, schema = M.schema(root) }
   end
   local found = M.discover(cwd)
-  if found.kind == "conflict" then
-    return { root = nil, source = "discovery", schema = "conflict", conflict = found.candidates, dir = found.dir }
-  elseif found.kind ~= "none" then
+  if found.kind ~= "none" then
     return { root = found.root, source = "discovery", schema = M.schema(found.root) }
   end
   local base = M.git_root(cwd or vim.uv.cwd()) or M.canonical(cwd or vim.uv.cwd())

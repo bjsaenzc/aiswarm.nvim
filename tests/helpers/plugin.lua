@@ -2,13 +2,13 @@
 local M = {}
 local sb = require("helpers.sandbox")
 
---- Unload every aiswarm/hive module and command guard.
+--- Unload every aiswarm/aiswarm module and command guard.
 function M.unload()
   for name in pairs(package.loaded) do
-    if name == "hive" or name:match("^hive%.") or name == "aiswarm" or name:match("^aiswarm%.") then package.loaded[name] = nil end
+    if name == "aiswarm" or name:match("^aiswarm%.") then package.loaded[name] = nil end
   end
-  vim.g.loaded_hive, vim.g.loaded_aiswarm = nil, nil
-  for _, name in ipairs({ "AISwarm", "Hive", "HivePick", "HiveResults", "HiveRefresh", "HivePause", "HiveTail", "HivePeek", "HiveGo", "HiveKill", "HiveAdd" }) do
+  vim.g.loaded_aiswarm = nil
+  for _, name in ipairs({ "AISwarm" }) do
     pcall(vim.api.nvim_del_user_command, name)
   end
 end
@@ -24,7 +24,7 @@ function M.setup(t, root, opts)
 end
 
 function M.source_plugin()
-  vim.g.loaded_hive, vim.g.loaded_aiswarm = nil, nil
+  vim.g.loaded_aiswarm = nil
   vim.cmd.source(sb.plugin .. "/plugin/aiswarm.lua")
 end
 

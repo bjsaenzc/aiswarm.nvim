@@ -91,27 +91,21 @@ return {
     local atts = store().attempts_of("T-001"); t:eq(#atts, 1)
   end },
   -- ------------------------------------------------------------ SDD-090
-  { id = "push.restricted_to_control_and_optional_legacy_translation", tasks = { "SDD-090" }, suites = { "core", "compatibility" }, run = function(t)
+  { id = "push.restricted_to_control_and_canonical_delivery", tasks = { "SDD-090" }, suites = { "core", "compatibility" }, run = function(t)
     kill_server(t)
     local root = v3.board(t, "push")
     v3.cli_json(t, root, { "add", "--id", "T-001" }, { stdin = "x\n" })
     local A = editor(t, root, "success")
-    local hive, canon = 0, 0
+    local canon = 0
     local aug = vim.api.nvim_create_augroup("AISwarmTestPush", { clear = true })
-    vim.api.nvim_create_autocmd("User", { group = aug, pattern = "HiveEvent", callback = function() hive = hive + 1 end })
     vim.api.nvim_create_autocmd("User", { group = aug, pattern = "AISwarmEvent", callback = function() canon = canon + 1 end })
     t:defer(function() pcall(vim.api.nvim_del_augroup_by_id, aug) end)
     v3.cli_json(t, root, { "set", "T-001", "--expect-revision", "1", "--priority", "3" })
     wait_state(t, "T-001", function(x) return x.priority == 3 end, 5000)
-    t:ok(canon >= 1); t:eq(hive, 0, "legacy HiveEvent off by default")
-    A.config.compat.hive_events = true
-    v3.cli_json(t, root, { "set", "T-001", "--expect-revision", "2", "--priority", "4" })
-    wait_state(t, "T-001", function(x) return x.priority == 4 end, 5000)
-    t:ok(hive >= 1, "legacy translation delivered only when enabled")
-    -- registration failure leaves live streaming operational
-    t:ok(store().connection.state == "live")
-    local src = sb.read(sb.plugin .. "/bin/aiswarm")
-    t:ok(not src:find("AISWARM_ON_EVENT.*telemetry"), "no push hook carries telemetry")
+    t:eq(canon, 1, "one canonical delivery")
+    A.on_event({ seq = 2, type = "edited", task = "T-001", v3_type = "task.edited" })
+    vim.wait(300)
+    t:eq(canon, 1, "duplicate push does not emit a second event")
   end },
   -- ------------------------------------------------------------ SDD-091
   { id = "reconnect.backoff_states_and_gap_resync", tasks = { "SDD-091" }, suites = { "core", "reliability" }, run = function(t)

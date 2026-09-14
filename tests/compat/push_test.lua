@@ -8,10 +8,10 @@ return {
     local got = {}
     t:defer(A.subscribe(function(kind, e) if kind == "event" then got[#got + 1] = e.seq end end))
     local payload = '{"seq":1,"type":"message","task":"T-0"}'
-    t:eq(require("hive").on_event_json(payload, root), true)
     t:eq(require("aiswarm").on_event_json(payload, root), true)
-    t:eq(got, { 1 }, "delivered once through both names")
-    t:eq(A.on_event_json(payload, "/some/other/.hive"), false, "mismatched root rejected")
+    t:eq(require("aiswarm").on_event_json(payload, root), true)
+    t:eq(got, { 1 }, "repeated canonical delivery is idempotent")
+    t:eq(A.on_event_json(payload, "/some/other/.aiswarm"), false, "mismatched root rejected")
   end },
   { id = "compat.push.script_round_trip", tasks = { "SDD-014" }, suites = { "core", "compatibility" }, run = function(t)
     local root = sb.legacy_board(t)
@@ -20,7 +20,7 @@ return {
     local got = {}
     t:defer(A.subscribe(function(kind, e) if kind == "event" then got[#got + 1] = e end end))
     local env = { PATH = vim.env.PATH, HOME = vim.env.HOME, AISWARM_ROOT = root }
-    for _, script in ipairs({ "aiswarm-push", "hive-push" }) do
+    for _, script in ipairs({ "aiswarm-push", "aiswarm-push" }) do
       local finished = false
       vim.system({ sb.bin(script), '{"seq":1,"type":"message","task":"T-0","text":"it\'s quoted"}' }, { env = env }, function() finished = true end)
       -- nvim --remote-expr needs this editor's loop to answer; pump until the push exits

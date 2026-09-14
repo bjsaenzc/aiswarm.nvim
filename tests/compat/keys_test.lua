@@ -1,4 +1,4 @@
--- SDD-013: user entry keys under <leader>A, no Hive <leader>H mappings.
+-- SDD-013: user entry keys under <leader>A, no AISwarm <leader>H mappings.
 local sb = require("helpers.sandbox")
 -- the config repository's spec when nested under a Neovim config, else the shipped example spec
 local function spec_path() local p = sb.repo .. "/lua/plugins/nvim-aiswarm.lua"; return sb.exists(p) and p or sb.plugin .. "/examples/lazy.lua" end
@@ -14,7 +14,6 @@ return {
     end
     for _, key in ipairs({ "<leader>Aa", "<leader>Ap", "<leader>An", "<leader>Al", "<leader>Ar" }) do t:ok(lhs[key], key) end
     t:eq(lhs["<leader>An"].mode, { "n", "v" }); t:ok(lhs["<leader>An"][2]:match("^:AISwarm new<cr>$"), "visual An keeps '<,'> range")
-    t:ok(not sb.exists(sb.repo .. "/lua/plugins/nvim-hive.lua"), "old spec removed")
     t:ok(not vim.tbl_contains(vim.tbl_map(function(k) return k[1] end, spec.keys), "<leader>Hh"))
     local wk = sb.read(sb.repo .. "/lua/plugins/which-key.lua")
     if wk then t:ok(wk:find('{ "<leader>A", group = "AI swarm" }', 1, true), "which-key group registered") end
@@ -35,7 +34,7 @@ return {
     t:ok(find("n", "<leader>Hr", true).desc:match("^Git"), "Git H action intact")
     t:ok(find("n", "<leader>aa", false).desc == "Sidekick", "Sidekick lowercase a intact")
     t:ok(find("n", "<leader>Ap", false).rhs:match("AISwarm pick"), "Ap opens the picker")
-    t:eq(find("n", "<leader>Hp", true), nil, "Hive no longer advertises <leader>Hp")
+    t:eq(find("n", "<leader>Hp", true), nil, "AISwarm no longer advertises <leader>Hp")
     t:ok(find("v", "<leader>An", false), "visual An present")
   end },
 }

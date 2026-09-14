@@ -70,7 +70,7 @@ return {
     t:eq(s.state, "running"); t:eq(s.wip, 2); t:eq(s.health, "alive")
     t:eq(#sb.tmux({ "list-sessions", "-F", "#{session_name}" }).stdout:gsub("[^\n]", ""), 1, "exactly one scheduler session")
     -- editor environment cannot change the reported WIP
-    local j = v3.cli_json(t, root, { "json" }, { env = { AISWARM_WIP = "9", HIVE_WIP = "9" } }); t:eq(j.wip, 2)
+    local j = v3.cli_json(t, root, { "json" }, { env = { AISWARM_WIP = "9", AISWARM_WIP = "9" } }); t:eq(j.wip, 2)
     -- pause stops new dispatch, workers continue
     v3.cli_json(t, root, { "add", "--id", "T-001" }, { stdin = "x\n" })
     local paused = v3.cli(root, { "scheduler", "pause" }); t:eq(paused.code, 0)

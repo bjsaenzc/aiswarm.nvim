@@ -28,7 +28,7 @@ Prototype: `tests/fixtures/runtime_spike/worker.lua` started as `nvim --clean --
 
 ## Decision
 
-- **Accept** headless Neovim as the runtime for: worker bootstrap (`runtime/worker.lua`), stream multiplexer (`aiswarm stream`), and all v3 board control commands (`runtime/cli.lua`). Bash `bin/aiswarm` stays the user-facing launcher and keeps serving **v2 (legacy `.hive` schema) boards through the unchanged v2 code path**; v3 boards are dispatched to the Lua runtime.
+- **Accept** headless Neovim as the runtime for: worker bootstrap (`runtime/worker.lua`), stream multiplexer (`aiswarm stream`), and all v3 board control commands (`runtime/cli.lua`). Bash `bin/aiswarm` stays the user-facing launcher and keeps serving **v2 (legacy `.aiswarm` schema) boards through the unchanged v2 code path**; v3 boards are dispatched to the Lua runtime.
 - The launcher resolves the Neovim executable absolutely: `$AISWARM_NVIM`, else `command -v nvim`; the editor passes its own `v:progpath`. Missing Neovim is an environment error (exit 4) reported before any task becomes runnable.
 - The runtime loads only bundled modules (`lua/aiswarm/**`); never `init.lua`, user plugins, or shada.
 

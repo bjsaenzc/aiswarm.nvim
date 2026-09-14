@@ -49,7 +49,7 @@ function M.list()
   return out
 end
 
---- Effective default provider: AISWARM_PROVIDER → HIVE_PROVIDER → mock (the backend default).
+--- Effective default provider: AISWARM_PROVIDER → mock (the backend default).
 function M.default()
   local v = require("aiswarm.config").default_provider()
   if v and by_id[v] then return v end
@@ -79,7 +79,7 @@ function M.build_argv(id, rendered_path, opts)
   local f = io.open(rendered_path, "r")
   local text = f and f:read("*a") or ""
   if f then f:close() end
-  local max_turns = tostring(opts.max_turns or vim.env.AISWARM_MAX_TURNS or vim.env.HIVE_MAX_TURNS or 40)
+  local max_turns = tostring(opts.max_turns or vim.env.AISWARM_MAX_TURNS or 40)
   if id == "claude" then return { exe, "-p", text, "--output-format", "text", "--permission-mode", "acceptEdits", "--max-turns", max_turns }
   elseif id == "codex" then return { exe, "exec", "--skip-git-repo-check", "--sandbox", "workspace-write", text }
   elseif id == "gemini" then return { exe, "-p", text }

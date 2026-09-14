@@ -19,7 +19,7 @@ function M.worker_argv(root, attempt_id)
   return { nvim_bin(), "--clean", "--headless", "--noplugin", "-u", "NONE", "-i", "NONE", "-n", "-l", plugin_root() .. "/runtime/worker.lua", "--root", root, "--attempt", attempt_id }
 end
 function M.child_env(ctx, extra)
-  local env = { AISWARM_ROOT = ctx.root, HIVE_ROOT = ctx.root, AISWARM_BOARD_ID = ctx.board.board_id, AISWARM_NVIM = nvim_bin(), AISWARM_QUIET_LEGACY = "1",
+  local env = { AISWARM_ROOT = ctx.root, AISWARM_BOARD_ID = ctx.board.board_id, AISWARM_NVIM = nvim_bin(),
     PATH = vim.env.PATH, HOME = vim.env.HOME, TMPDIR = vim.env.TMPDIR, TMUX_TMPDIR = vim.env.TMUX_TMPDIR, AISWARM_TMUX_SOCKET = vim.env.AISWARM_TMUX_SOCKET,
     AISWARM_WORKTREES = vim.env.AISWARM_WORKTREES, AISWARM_MAX_TURNS = vim.env.AISWARM_MAX_TURNS, AISWARM_MOCK_SLEEP = vim.env.AISWARM_MOCK_SLEEP,
     LANG = vim.env.LANG, LC_ALL = vim.env.LC_ALL, TERM = vim.env.TERM or "xterm-256color", USER = vim.env.USER, SHELL = vim.env.SHELL }

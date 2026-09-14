@@ -34,7 +34,7 @@ function M.inspect(id)    actions().resolve_id(id, function(tid) actions().run("
 function M.output(id)     actions().resolve_id(id, function(tid) actions().run("output", actions().target(tid)) end) end
 function M.report(id)     actions().resolve_id(id, function(tid) actions().run("report", actions().target(tid)) end) end
 function M.cancel(id)
-  if not require("aiswarm.store").capability("cancel") then return M.unavailable("cancel", "a v3 board (legacy boards only support :HiveKill = cancel and requeue; run :AISwarm migrate --dry-run)") end
+  if not require("aiswarm.store").capability("cancel") then return M.unavailable("cancel", "a v3 board (legacy boards only support :AISwarmKill = cancel and requeue; run :AISwarm migrate --dry-run)") end
   actions().resolve_id(id, function(tid) actions().run("cancel", actions().target(tid)) end)
 end
 function M.retry(id)

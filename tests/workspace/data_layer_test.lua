@@ -73,7 +73,7 @@ return {
   { id = "adapter.legacy_snapshot_normalized_with_capabilities", tasks = { "SDD-045" }, suites = { "core", "compatibility" }, run = function(t)
     pl.unload(); require("aiswarm")
     local adapter = require("aiswarm.adapter")
-    local meta = { api_version = 2, capabilities = { atomic_add = true }, seq = 3, paused = true, wip = 3, root = "/x/.hive" }
+    local meta = { api_version = 2, capabilities = { atomic_add = true }, seq = 3, paused = true, wip = 3, root = "/x/.aiswarm" }
     local tasks = { ["T-001"] = { id = "T-001", state = "active", title = "a", provider = "mock", started_at = "2026-01-01T00:00:00Z" },
       ["T-002"] = { id = "T-002", state = "failed", rc = "orphaned", ended_at = "2026-01-01T00:01:00Z", depends_on = {} },
       ["T-003"] = { id = "T-003", state = "ready", depends_on = { "T-002" } }, ["T-004"] = { id = "T-004", state = "done", rc = 0 } }

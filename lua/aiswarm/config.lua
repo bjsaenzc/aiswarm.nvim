@@ -19,7 +19,6 @@ M.defaults = {
   tail = { position = "bottom", height = 0.35 },
   ui = { layout = "float", width = 0.92, height = 0.86, icons = "unicode", motion = false, quiet_after_s = 60 },
   telemetry = { enabled = true, heartbeat_ms = 5000, flush_ms = 100, reconcile_ms = 10000 },
-  compat = { hive_commands = true, hive_events = false },
 }
 
 local warned = {}
@@ -31,16 +30,11 @@ function M.warn_legacy(key, msg)
 end
 function M._reset_warnings() warned = {} end
 
---- Canonical environment wins; legacy is accepted with a one-time warning.
+--- Read a canonical environment variable. Empty values are treated as unset.
 ---@return string? value, string? source
-function M.env(canonical, legacy)
+function M.env(canonical)
   local v = vim.env[canonical]
   if v and v ~= "" then return v, canonical end
-  v = vim.env[legacy]
-  if v and v ~= "" then
-    M.warn_legacy(legacy, ("%s is deprecated; use %s"):format(legacy, canonical))
-    return v, legacy
-  end
   return nil, nil
 end
 
@@ -73,7 +67,6 @@ function M.validate(c)
   positive_int("telemetry.heartbeat_ms", c.telemetry.heartbeat_ms); positive_int("telemetry.flush_ms", c.telemetry.flush_ms)
   positive_int("telemetry.reconcile_ms", c.telemetry.reconcile_ms)
   for k, v in pairs(c.notify) do if type(v) ~= "boolean" then error("notify." .. k .. " must be a boolean", 0) end end
-  for k, v in pairs(c.compat) do if type(v) ~= "boolean" then error("compat." .. k .. " must be a boolean", 0) end end
   return c
 end
 
@@ -94,9 +87,9 @@ function M.resolve(opts)
   return c
 end
 
---- Effective provider default shared with the launcher: AISWARM_PROVIDER → HIVE_PROVIDER → registry default.
+--- Effective provider default shared with the launcher: AISWARM_PROVIDER → AISWARM_PROVIDER → registry default.
 function M.default_provider()
-  local v = M.env("AISWARM_PROVIDER", "HIVE_PROVIDER")
+  local v = M.env("AISWARM_PROVIDER")
   return v
 end
 

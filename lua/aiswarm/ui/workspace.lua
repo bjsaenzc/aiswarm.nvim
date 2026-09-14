@@ -134,7 +134,6 @@ function M.state_kind()
   local cur = project.current
   if not cur then
     local r = A()._resolved or {}
-    if r.schema == "conflict" then return "conflict" end
     return "no_board"
   end
   local schema = cur.schema or project.schema(cur.root)
@@ -159,9 +158,6 @@ local function state_lines(kind, width)
     local reg = require("aiswarm.providers.registry")
     add(""); add("  Providers:", "AISwarmHeader")
     for _, p in ipairs(reg.list()) do add(("    %-8s %s%s"):format(p.id, p.available and "available" or ("unavailable (" .. tostring(p.exe) .. " not found)"), p.id == "mock" and " · simulated execution, spends no tokens" or ""), p.available and "AISwarmDone" or "AISwarmMuted") end
-  elseif kind == "conflict" then
-    add(""); add("  Both .aiswarm and .hive exist in " .. tostring(r.dir), "AISwarmBlocked"); add("")
-    add("  o   choose which board to open (:AISwarm project choose)", "AISwarmValue")
   elseif kind == "migrating" then
     add(""); add("  Interrupted migration on this board.", "AISwarmBlocked"); add("")
     add("  :AISwarm migrate --resume    finish the upgrade", "AISwarmValue"); add("  :AISwarm migrate --rollback  restore the v2 board", "AISwarmValue")
@@ -201,7 +197,7 @@ function M.render_tasks()
     lines = { { "aiswarm needs at least 40×12 cells", { { 0, 40, "AISwarmTitle" } } },
       { ("running %d  queued %d  attention %d  done %d"):format(c.running, c.queued, c.attention, c.finished), { { 0, 60, "AISwarmMuted" } } },
       { "p  task picker      :  commands", { { 0, 40, "AISwarmHint" } } }, { "q  close", { { 0, 10, "AISwarmHint" } } } }
-  elseif kind == "no_board" or kind == "conflict" or kind == "migrating" or kind == "loading" then
+  elseif kind == "no_board" or kind == "migrating" or kind == "loading" then
     lines = state_lines(kind, width)
   else
     local banner, hl = M.banner()

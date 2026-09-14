@@ -17,7 +17,7 @@ return {
     t:ok(e.XDG_CONFIG_HOME:find(t.run_dir, 1, true) == 1, "XDG_CONFIG_HOME isolated")
     t:ok(e.NVIM_LOG_FILE:find(t.run_dir, 1, true) == 1, "Neovim log inside the sandbox")
     t:eq(e.TMUX, nil, "not attached to the caller's tmux")
-    t:eq(e.HIVE_ROOT, nil); t:eq(e.AISWARM_ROOT, nil)
+    t:eq(e.AISWARM_ROOT, nil)
     t:eq(vim.o.shada, "", "shada disabled")
     -- in a standalone checkout the repository root is the plugin itself and belongs on the runtimepath
     if t.repo ~= vim.env.AISWARM_TEST_PLUGIN then

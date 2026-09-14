@@ -1,4 +1,4 @@
--- aiswarm.nvim — public API and backend runner. Legacy `require("hive")` forwards here.
+-- aiswarm.nvim — public API and backend runner.
 local M = {}
 local config = require("aiswarm.config")
 local project = require("aiswarm.project")
@@ -14,10 +14,10 @@ function M.root()
   return M._resolved.root
 end
 
---- Child environment for the backend: canonical variables, legacy aliases and the Neovim executable.
+--- Child environment for the backend: canonical variables and the Neovim executable.
 function M.env()
   local root = M.root()
-  return { AISWARM_ROOT = root, HIVE_ROOT = root, AISWARM_NVIM = vim.v.progpath, AISWARM_QUIET_LEGACY = "1" }
+  return { AISWARM_ROOT = root, AISWARM_NVIM = vim.v.progpath }
 end
 
 ---@param args string[]
@@ -72,9 +72,6 @@ function M.setup(opts)
     project.open(r.root, { source = r.source })
   else
     project.close()
-    if r.schema == "conflict" then
-      M.warn("both .aiswarm and .hive exist in " .. tostring(r.dir) .. "; run :AISwarm project to choose one")
-    end
   end
   require("aiswarm.notify").attach()
   M._setup_done = true

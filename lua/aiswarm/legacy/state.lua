@@ -40,13 +40,13 @@ local function decode_snapshot(text)
     or snap.seq < 0 or snap.seq % 1 ~= 0 or type(snap.tasks) ~= "table"
     or not vim.islist(snap.tasks)
     or (snap.capabilities ~= nil and type(snap.capabilities) ~= "table") then
-    return nil, "invalid hive json snapshot"
+    return nil, "invalid aiswarm json snapshot"
   end
   local ids, counts = {}, { ready = 0, active = 0, done = 0, failed = 0 }
   for _, t in ipairs(snap.tasks) do
     if type(t) ~= "table" or type(t.id) ~= "string" or not t.id:match("^[A-Za-z0-9][A-Za-z0-9_-]*$")
       or not ORDER[t.state] or ids[t.id] then
-      return nil, "invalid task in hive json snapshot"
+      return nil, "invalid task in aiswarm json snapshot"
     end
     for _, key in ipairs({ "title", "provider", "created", "session" }) do
       if t[key] ~= nil and type(t[key]) ~= "string" then return nil, "invalid task " .. key end
@@ -137,7 +137,7 @@ function S.list()
 end
 function S.ids() return vim.tbl_map(function(t) return t.id end, S.list()) end
 function S.statusline()
-  if S.meta.error then return "hive: disconnected" end
+  if S.meta.error then return "aiswarm: disconnected" end
   local c = S.meta.counts or {}
   if next(c) == nil then return "" end
   return string.format("%sR:%d A:%d ✓%d ✗%d", S.meta.paused and "⏸ " or "",
@@ -157,7 +157,6 @@ local function deliver(e)
   S.emit("event", e)
   local ok, err = pcall(vim.api.nvim_exec_autocmds, "User", { pattern = "AISwarmEvent", data = e })
   if not ok then H().err("AISwarmEvent callback failed: " .. tostring(err)) end
-  require("aiswarm.compat").emit_hive_event(e)
 end
 
 --- Deduplicate and buffer out-of-order push events until the journal fills gaps.

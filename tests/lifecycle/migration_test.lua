@@ -19,15 +19,15 @@ local function fixture(t, name)
   sb.legacy_add(t, root, { "--id", "T-004", "--provider", "codex" }, "p4\n")
   sb.legacy_add(t, root, { "--id", "T-005" }, "p5\n")
   force_state(root, "T-001", "ready", "active", { started_epoch = os.time(), started_at = "2026-01-01T00:00:00Z" })
-  t:eq(sb.hive(root, { "exec", "T-001" }, { timeout = 15000 }).code, 0)          -- mock: done with a real report
+  t:eq(sb.aiswarm(root, { "exec", "T-001" }, { timeout = 15000 }).code, 0)          -- mock: done with a real report
   force_state(root, "T-004", "ready", "active", { started_epoch = os.time(), started_at = "2026-01-01T00:00:00Z" })
   local dir = t:tmpdir("stub"); sb.write(dir .. "/codex", "#!/usr/bin/env bash\necho stub; exit 1\n"); vim.uv.fs_chmod(dir .. "/codex", 493)
-  t:eq(sb.hive(root, { "exec", "T-004" }, { env = { PATH = dir .. ":" .. vim.env.PATH }, timeout = 15000 }).code, 0) -- failed, synthesized report
+  t:eq(sb.aiswarm(root, { "exec", "T-004" }, { env = { PATH = dir .. ":" .. vim.env.PATH }, timeout = 15000 }).code, 0) -- failed, synthesized report
   force_state(root, "T-005", "ready", "active", { started_epoch = os.time(), started_at = "2026-01-01T00:00:00Z", session = "agent-T-005" }) -- active, no session
   return root
 end
 local function migrate(t, root, extra)
-  local r = v3.cli(root, vim.list_extend({ "migrate", "--json" }, extra or {}), { env = { AISWARM_INVOKED_AS = "" } })
+  local r = v3.cli(root, vim.list_extend({ "migrate", "--json" }, extra or {}))
   return r, r.code == 0 and sb.json(r.stdout) or nil
 end
 local function kill_server(t) t:defer(function() sb.tmux({ "kill-server" }) end) end
@@ -46,10 +46,12 @@ return {
     t:ok(vim.iter(texts):any(function(x) return x:match("^T%-005:active task without a live session") end))
     t:eq(inv.blocking, 0)
     local human = v3.cli(root, { "migrate", "--dry-run" }); t:match(human.stdout, "ready to migrate")
-    -- ambiguous identity: both directories
-    vim.fn.mkdir(vim.fs.dirname(root) .. "/.aiswarm", "p")
+    -- An unrelated board beside an explicit import root is not an identity conflict.
+    local sibling = vim.fs.dirname(root) .. "/another-board"
+    vim.fn.mkdir(sibling, "p")
     local inv2 = sb.json(v3.cli(root, { "migrate", "--dry-run", "--json" }).stdout)
-    t:ok(inv2.blocking >= 1); vim.fn.delete(vim.fs.dirname(root) .. "/.aiswarm", "d")
+    t:eq(inv2.blocking, inv.blocking)
+
   end },
   { id = "migrate.refuses_live_writer_and_scheduler", tasks = { "SDD-039" }, suites = { "core", "compatibility" }, run = function(t)
     kill_server(t)
@@ -57,9 +59,9 @@ return {
     sb.tmux({ "new-session", "-d", "-s", "agent-T-005", "sleep 60" })
     local r = migrate(t, root); t:eq(r.code, 3); t:match(r.stderr, "live tmux session")
     sb.tmux({ "kill-session", "-t", "agent-T-005" })
-    sb.tmux({ "new-session", "-d", "-s", "hive", "sleep 60" })
+    sb.tmux({ "new-session", "-d", "-s", "aiswarm", "sleep 60" })
     local r2 = migrate(t, root); t:eq(r2.code, 3); t:match(r2.stderr, "scheduler session")
-    sb.tmux({ "kill-session", "-t", "hive" })
+    sb.tmux({ "kill-session", "-t", "aiswarm" })
     vim.fn.mkdir(root .. "/locks/dispatch.d", "p")
     local r3 = migrate(t, root); t:eq(r3.code, 3); t:match(r3.stderr, "legacy writer may be active")
     vim.fn.delete(root .. "/locks/dispatch.d", "d")

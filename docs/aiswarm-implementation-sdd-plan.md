@@ -1,10 +1,12 @@
 # aiswarm implementation SDD plan
 
-Status: Ready for implementation planning; every task below is **pending**.
+Status: **Historical implementation ledger; release acceptance reopened on 2026-09-14.** Before this review, SDD-001–100 were checked despite missing artifacts and incomplete acceptance coverage. Remaining checkmarks record historical claims, not a fresh certification. SDD-099/100 are reopened below. The [current audit](aiswarm-implementation-audit.md) and [remediation plan](aiswarm-remediation-sdd-plan.md) govern remaining work.
 
-Source: [aiswarm UX technical specification](aiswarm-ux-technical-spec.md) and [Hive code audit](hive-code-audit.md). Plan baseline: `a734168`, 2026-09-13. The source specification retains its original audit baseline `c7c636a`.
+The standalone replacement decision supersedes transitional package aliases in this plan. Cards involving identity are restated below for the canonical package; their historical evidence must not be interpreted as evidence for the revised contract.
 
-SDD means **specification-driven development** here: requirement → contract/example → implementation → observable verification → recorded evidence. This document plans the work; it does not claim any proposed command, test harness, API or feature already exists.
+Source: [aiswarm UX technical specification](aiswarm-ux-technical-spec.md) and [AISwarm code audit](aiswarm-baseline-audit.md). Plan baseline: `a734168`, 2026-09-13. The source specification retains its original audit baseline `c7c636a`.
+
+SDD means **specification-driven development** here: requirement → contract/example → implementation → observable verification → recorded evidence. This document retains original requirement/task IDs; current implementation status is assessed in the linked audit.
 
 ## 1. Execution rules
 
@@ -36,7 +38,7 @@ bash scripts/test-aiswarm.sh --suite performance
 
 Until SDD-001 exists, these are planned commands. `--task` selects meaningful cases tagged to an ID; it fails for unknown IDs or empty automated selections. Manual/design tasks use the review procedure in their card and save an evidence record instead. Do not create a passing no-op test just to satisfy an ID. The core suite includes every core task's automated cases; manual evidence and platform coverage are additional release requirements.
 
-Use `P` below for the plugin root: initially `lua/myPlugins/hive.nvim`, then `lua/myPlugins/aiswarm.nvim` after SDD-009. Paths under `P` name intended implementation ownership, not mandatory filenames if a better split is justified. New modules remain proposed until their task creates them. Test fixtures live in `P/tests/`; evidence lives in ignored `artifacts/aiswarm/<run-id>/`. Keep small durable reference fixtures and scenario definitions in version control; avoid committing generated boards, transcripts or personal machine paths.
+Use `P` below for this standalone repository root. Paths under `P` name intended implementation ownership, not mandatory filenames if a better split is justified. New modules remain proposed until their task creates them. Test fixtures live in `P/tests/`; evidence lives in ignored `artifacts/aiswarm/<run-id>/`. Keep small durable reference fixtures and scenario definitions in version control; avoid committing generated boards, transcripts or personal machine paths.
 
 An evidence record contains: task ID, status, commit, runner command/manual procedure, relevant tool versions, fixture/scenario, expected result, actual result, and artifact paths. No estimated dates are assigned before the runtime/durability spikes establish feasibility.
 
@@ -46,7 +48,7 @@ The specification is authoritative for behavior and numerical limits. These labe
 
 | Requirement | Source and acceptance focus | Owning tasks |
 |---|---|---|
-| R01 Brand/compatibility | Spec §§4, 8: canonical name, aliases, environment precedence, one runtime, distinct keys | SDD-002, SDD-009–016, SDD-037, SDD-043, SDD-045, SDD-090, SDD-096 |
+| R01 Brand/compatibility | Spec §§4, 8: canonical name, environment precedence, one runtime, distinct keys | SDD-002, SDD-009–016, SDD-037, SDD-043, SDD-045, SDD-090, SDD-096 |
 | R02 Project/first use | Spec §4: explicit root selection, missing/empty/offline states, initialization and scheduler actions | SDD-015, SDD-018, SDD-029, SDD-042, SDD-065 |
 | R03 Persistence | Spec §§5–6: schema, locks, committed control order, projection recovery | SDD-005–006, SDD-017–024 |
 | R04 Queue/dependencies | Spec §§4–5: validation, revision checks, numeric order and visible blocking | SDD-023–026, SDD-031, SDD-062 |
@@ -70,7 +72,7 @@ The specification is authoritative for behavior and numerical limits. These labe
 | Work package | Tasks | Completion boundary |
 |---|---|---|
 | Foundation | SDD-001–008 | Test isolation, known baseline, explicit contracts and runtime feasibility evidence. Runtime-dependent work waits for SDD-004; durable storage work waits for SDD-005. |
-| Compatibility | SDD-009–016 | Both names operate through one implementation on a v2 fixture; data stays in place. Final cross-version verification occurs in SDD-043. |
+| Compatibility | SDD-009–016 | The canonical package operates on a v2 fixture; data stays in place. Final cross-version verification occurs in SDD-043. |
 | Lifecycle | SDD-017–037 | Validated v3 writes, unique attempts, scoped process control and correct cancel/retry semantics. |
 | Migration | SDD-038–043 | Existing boards migrate with verified backup/recovery and compatibility behavior. |
 | Workspace | SDD-044–068 | Complete keyboard UX using deterministic state/stream fixtures. Production telemetry remains gated. |
@@ -97,7 +99,7 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 #### [x] SDD-002 — Preserve the legacy observable contracts
 
 - **Requires:** SDD-001. **Requirement:** R01, R18. **Scope:** `P/tests/legacy/`.
-- **Deliver:** characterization fixtures for all public Hive commands/API forwards, API v2 snapshots, ID completion, root behavior, form preservation and ordered event deduplication. Record cancel/requeue and the audited regressions as current behavior, not desired v3 behavior.
+- **Deliver:** characterization fixtures for all public AISwarm commands/API forwards, API v2 snapshots, ID completion, root behavior, form preservation and ordered event deduplication. Record cancel/requeue and the audited regressions as current behavior, not desired v3 behavior.
 - **Verify:** replay sequence 2→1→2 emits 1,2 once; prompt blank/header-like lines survive; reproductions show row-selection drift, stale retry report and absent automatic progress. Expected legacy quirks remain explicitly labelled and cannot satisfy v3 acceptance tests.
 
 #### [x] SDD-003 — Add deterministic worker scenarios
@@ -140,45 +142,45 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 
 #### [x] SDD-009 — Establish the canonical Lua/plugin namespace
 
-- **Requires:** SDD-002. **Requirement:** R01. **Scope:** plugin directory, `P/lua/aiswarm/`, `P/lua/hive/`, lazy spec.
-- **Deliver:** move implementation to the canonical package, set lazy `main="aiswarm"`, and retain supported public Lua/health shims forwarding to one implementation. Keep legacy behavior behind the compatibility adapter for now.
-- **Verify:** loading through either name first and then both produces one state instance, one follower, one command registration and equivalent legacy public behavior. No data directory is moved.
+- **Requires:** SDD-002. **Requirement:** R01. **Scope:** plugin directory, `P/lua/aiswarm/`, lazy spec.
+- **Deliver:** use the standalone canonical package and lazy `main="aiswarm"`; keep only internal schema-v2 storage adapters.
+- **Verify:** loading the canonical module repeatedly produces one state instance, one follower and one command registration. No data directory is moved.
 
-#### [x] SDD-010 — Add canonical CLI launchers and old-name wrappers
+#### [x] SDD-010 — Provide canonical CLI launchers
 
-- **Requires:** SDD-009. **Requirement:** R01. **Scope:** `P/bin/aiswarm`, `aiswarm-push`, `hive`, `hive-push`.
-- **Deliver:** canonical executable discovery and argument-preserving wrappers, including a transitional alias at the old documented local binary path if the directory move would otherwise break it.
-- **Verify:** execute wrappers with spaced/quoted prompt paths and compare argv, exit code, stdout/stderr with the canonical v2 invocation. Existing documented absolute launch paths still resolve during compatibility; wrappers never recurse.
+- **Requires:** SDD-009. **Requirement:** R01. **Scope:** `P/bin/aiswarm`, `aiswarm-push`, `aiswarm-progress`.
+- **Deliver:** canonical executable discovery and argument-preserving invocation in the standalone checkout.
+- **Verify:** execute the canonical launcher on v2/v3 fixtures with spaced/quoted prompt paths; verify prompt bytes, exit status and stdout/stderr.
 
-#### [x] SDD-011 — Normalize configuration and environment aliases
+#### [x] SDD-011 — Normalize canonical configuration and environment
 
 - **Requires:** SDD-009, SDD-010. **Requirement:** R01. **Scope:** config/environment resolution shared by launcher and client.
-- **Deliver:** type/range validation and explicit option → AISWARM_ROOT → HIVE_ROOT precedence; canonical environment variables override legacy ones; warn once on legacy use.
+- **Deliver:** type/range validation and explicit option → AISWARM_ROOT → discovery precedence; only canonical environment names are read.
 - **Verify:** table-driven unset/conflicting/invalid values yield the same effective root and defaults from CLI and Neovim; invalid settings fail before jobs/files are created. Unset provider defaults to the backend registry's eventual mock default.
 
-#### [x] SDD-012 — Register canonical and legacy commands once
+#### [x] SDD-012 — Register the canonical command once
 
-- **Requires:** SDD-009, SDD-011. **Requirement:** R01. **Scope:** `P/plugin/aiswarm.lua`, commands/compat modules.
-- **Deliver:** canonical subcommand parser, completion and the ten legacy command aliases. Route existing features; reject unimplemented v3-only actions with an explicit capability message until wired.
-- **Verify:** both loading orders register each command once; visual range reaches composition unchanged; unknown subcommands fail clearly; legacy optional-ID behavior remains covered until contextual resolution is installed in SDD-052.
+- **Requires:** SDD-009, SDD-011. **Requirement:** R01. **Scope:** `P/plugin/aiswarm.lua`, commands module.
+- **Deliver:** canonical subcommand parser and completion, registered under one `:AISwarm` command. Route existing features; reject unimplemented v3-only actions with an explicit capability message until wired.
+- **Verify:** repeated loading registers the command once; visual range reaches composition unchanged; unknown subcommands fail clearly; legacy optional-ID behavior remains covered until contextual resolution is installed in SDD-052.
 
 #### [x] SDD-013 — Move user entry keys to the AI swarm group
 
 - **Requires:** SDD-012. **Requirement:** R01, R17. **Scope:** local lazy spec and `lua/plugins/which-key.lua`.
-- **Deliver:** `<leader>Aa/Ap/An/Al/Ar` with accurate descriptions and range handling; remove Hive's conflicting global H mappings; inspect existing runtime conflicts before installing defaults.
-- **Verify:** inspect mappings in an ordinary buffer and a Git-tracked buffer. Hive no longer shadows/advertises H picker/results, Git H actions and Sidekick lowercase a actions remain intact, and visual An retains selected lines.
+- **Deliver:** `<leader>Aa/Ap/An/Al/Ar` with accurate descriptions and range handling; remove AISwarm's conflicting global H mappings; inspect existing runtime conflicts before installing defaults.
+- **Verify:** inspect mappings in an ordinary buffer and a Git-tracked buffer. AISwarm no longer shadows/advertises H picker/results, Git H actions and Sidekick lowercase a actions remain intact, and visual An retains selected lines.
 
-#### [x] SDD-014 — Route legacy push through the canonical session
+#### [x] SDD-014 — Route push through the canonical session
 
-- **Requires:** SDD-009, SDD-011. **Requirement:** R01, R17. **Scope:** push wrappers, compatibility RPC and registration cleanup.
-- **Deliver:** old and new push entry points target the same canonical store with root checks; preserve owner-checked registration teardown and useful failed-registration diagnostics.
-- **Verify:** duplicate delivery through both names emits one event; mismatched root is rejected; one editor's teardown cannot erase another's registration. Missing/dead registration never disables the follower.
+- **Requires:** SDD-009, SDD-011. **Requirement:** R01, R17. **Scope:** push helper, canonical RPC and registration cleanup.
+- **Deliver:** the push entry point targets the canonical store with root checks; preserve owner-checked registration teardown and useful failed-registration diagnostics.
+- **Verify:** duplicate delivery through stream and push emits one event; mismatched root is rejected; one editor's teardown cannot erase another's registration. Missing/dead registration never disables the follower.
 
 #### [x] SDD-015 — Introduce explicit project session ownership
 
 - **Requires:** SDD-009, SDD-011. **Requirement:** R02, R14. **Scope:** `project.lua`, session lifetime.
-- **Deliver:** ancestor discovery, canonicalized roots, explicit both-directory conflict handling, project switching independent of setup, and generation ownership of pending callbacks.
-- **Verify:** nested cwd and symlink fixtures select the intended board; cwd change alone does not retarget actions; explicit switch keeps preferences and invalidates old callbacks. Both `.hive`/`.aiswarm` requires selection, not a silent merge.
+- **Deliver:** ancestor discovery, canonicalized roots, project switching independent of setup, and generation ownership of pending callbacks.
+- **Verify:** nested cwd and symlink fixtures select the intended board; cwd change alone does not retarget actions; explicit switch keeps preferences and invalidates old callbacks. Only `.aiswarm` is auto-discovered; explicit paths preserve existing schema-v2 data.
 
 #### [x] SDD-016 — Centralize provider discovery and defaults
 
@@ -311,8 +313,8 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 #### [x] SDD-037 — Translate legacy mutations onto v3 semantics
 
 - **Requires:** SDD-012, SDD-033, SDD-034, SDD-036. **Requirement:** R01. **Scope:** v3 compatibility write adapter.
-- **Deliver:** translate established Hive operations through validated v3 transactions, preserving documented legacy kill→cancel-and-requeue as one serialized compatibility operation and warning explicitly.
-- **Verify:** `HiveKill`/old CLI kill requeues exactly once on v3; canonical cancel does not. No compatibility path bypasses current-attempt, revision, dependency or path validation.
+- **Deliver:** translate established AISwarm operations through validated v3 transactions, preserving documented legacy kill→cancel-and-requeue as one serialized compatibility operation and warning explicitly.
+- **Verify:** `AISwarmKill`/old CLI kill requeues exactly once on v3; canonical cancel does not. No compatibility path bypasses current-attempt, revision, dependency or path validation.
 
 ### Migration: make existing boards usable without losing evidence
 
@@ -343,13 +345,13 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 #### [x] SDD-042 — Expose migration state in project selection
 
 - **Requires:** SDD-015, SDD-041. **Requirement:** R02, R06. **Scope:** project/migration command views.
-- **Deliver:** show legacy capabilities, inventory/upgrade action and migrated-history labels; preserve the `.hive` storage location unless a separate move is chosen.
+- **Deliver:** show legacy capabilities, inventory/upgrade action and migrated-history labels; preserve the `.aiswarm` storage location unless a separate move is chosen.
 - **Verify:** user can inspect a legacy board, see why a v3-only action is unavailable, review dry-run and migrate without automatic scheduler start. An interrupted upgrade displays recovery state rather than an empty queue.
 
 #### [x] SDD-043 — Verify the compatibility and migration matrix
 
 - **Requires:** SDD-013, SDD-014, SDD-016, SDD-037, SDD-042. **Requirement:** R01, R06, R18. **Scope:** acceptance cases/evidence only.
-- **Deliver:** matrix for both executable/module/command names, environment precedence, v2/v3 boards, root conflicts, push and migration/rollback.
+- **Deliver:** matrix for the single executable/module/command namespace, environment precedence, v2/v3 boards, explicit root selection, push and migration/rollback.
 - **Verify:** run `--suite compatibility`; each supported combination passes and each unsupported combination fails explicitly. Confirm one runtime/store and no unintended move of board/worktree/branch data.
 
 ### Workspace: implement the user journeys against stable contracts
@@ -635,7 +637,7 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 #### [x] SDD-090 — Restrict compatibility push to low-volume control
 
 - **Requires:** SDD-014, SDD-088. **Requirement:** R01, R12. **Scope:** push/event compatibility bridge.
-- **Deliver:** canonical high-volume stream as the primary path; optional legacy `HiveEvent` translation off by default; use shared identity for control deduplication.
+- **Deliver:** canonical high-volume stream as the primary path; optional legacy `AISwarmEvent` translation off by default; use shared identity for control deduplication.
 - **Verify:** same control record via follower/push reaches canonical subscribers once; optional legacy event is delivered only when enabled; raw output does not launch a push subprocess; registration failure leaves live streaming operational.
 
 #### [x] SDD-091 — Reconnect and resynchronize with visible status
@@ -688,13 +690,13 @@ There are **100 core tasks and 7 optional integration tasks**. The final core ga
 - **Deliver:** repeatable real-Neovim scripts/screenshots at 140×45, 100×30, 80×24, 60×20, 35×10; light/dark/ASCII/Unicode and motion disabled; exact breakpoint-edge checks.
 - **Verify:** no clipping of essential actions/state, illegal geometry, unreadable selected row, broken wide glyph or focus/scroll jump. A first-time reviewer completes mock onboarding and can inspect output/report/activity in ≤2 actions from selected task. Record actual keystrokes/issues; headless buffer snapshots alone do not satisfy this task.
 
-#### [x] SDD-099 — Execute the platform and failure acceptance matrix
+#### [ ] SDD-099 — Execute the platform and failure acceptance matrix
 
 - **Requires:** SDD-022, SDD-031, SDD-035, SDD-041, SDD-086, SDD-092, SDD-096, SDD-097, SDD-098. **Requirement:** R18. **Scope:** core/compatibility/reliability/performance suite evidence only.
 - **Deliver:** macOS Bash 3.2 with required tools and Linux runs; documented minimum Neovim 0.10.4 and the selected current stable runtime; pinned Snacks plus any explicitly supported new revision. Record exact versions/hardware, not moving “latest” labels in results.
 - **Verify:** all automated suites and manual requirements pass on the supported combinations, including crash injection, retained dead pane, two boards, migration interruption, restart/ack boundaries, ENOSPC, rotation and full benchmark. Missing environment leaves that matrix cell unverified and the release gate pending.
 
-#### [x] SDD-100 — Close core implementation against the specification
+#### [ ] SDD-100 — Close core implementation against the specification
 
 - **Requires:** all SDD-001–099. **Requirement:** R18. **Scope:** core release checklist/evidence index only.
 - **Deliver:** reconcile each requirement, audit finding and task with evidence; record supported versions and remaining optional capabilities. Remove or hide incomplete advertised core paths.

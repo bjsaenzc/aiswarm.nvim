@@ -117,9 +117,9 @@ function M.inventory(root)
     if not ids[id] then finding("info", "report without a task record: results/" .. e.name) end
     inv.reports[#inv.reports + 1] = e.name
   end
-  local sched = vim.env.AISWARM_SESSION or vim.env.HIVE_SESSION or "hive"
+  local sched = vim.env.AISWARM_SESSION or "aiswarm"
   inv.scheduler = { session = sched, live = T.has(sched), paused = U.exists(root .. "/paused") }
-  if inv.scheduler.live then finding("error", "legacy scheduler session '" .. sched .. "' is running; run `hive down` first") end
+  if inv.scheduler.live then finding("error", "legacy scheduler session '" .. sched .. "' is running; run `aiswarm down` first") end
   for _, e in ipairs(U.list(root .. "/locks")) do
     local st = uv.fs_stat(root .. "/locks/" .. e.name)
     local age = st and (U.now_s() - st.mtime.sec) or 0
@@ -128,7 +128,6 @@ function M.inventory(root)
   end
   if U.exists(root .. "/nvim.server") then inv.registration = vim.trim(U.read(root .. "/nvim.server") or ""); finding("info", "editor push registration present: " .. inv.registration) end
   local base = vim.fs.dirname(root)
-  if vim.fs.basename(root) == ".hive" and U.is_dir(base .. "/.aiswarm") then finding("error", "both .hive and .aiswarm exist in " .. base .. "; migration keeps .hive in place, choose the board explicitly") end
   local blocking = 0
   for _, f in ipairs(inv.findings) do if f.level == "error" then blocking = blocking + 1 end end
   inv.blocking = blocking

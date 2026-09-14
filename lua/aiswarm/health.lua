@@ -22,7 +22,6 @@ function M.assess(d, editor)
   add("info", ("board: %s (%s, schema %s)"):format(tostring(editor.root or d.root), tostring(editor.source), tostring(schema)))
   if schema == "v2" then add("warn", "legacy v2 board: no attempt history, cancel/retry, or structured telemetry — review `:AISwarm migrate --dry-run`, then `:AISwarm migrate --upgrade`") end
   if schema == "migrating" then add("error", "interrupted migration — run `:AISwarm migrate --resume` or `--rollback` before using this board") end
-  if schema == "conflict" then add("error", "both .aiswarm and .hive exist — choose one with `:AISwarm project choose`") end
   if schema == "missing" then add("info", "no board yet — `:AISwarm init` creates one explicitly") end
   if d.migration == "in-progress" then add("error", "a migration marker is present; compliant writers refuse mutations until it completes") end
   local s = editor.scheduler or d.scheduler or {}

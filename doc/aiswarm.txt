@@ -1,4 +1,4 @@
-*aiswarm.txt*                 AI swarm task workspace for Neovim (formerly hive)
+*aiswarm.txt*                 AI swarm task workspace for Neovim
 
 ==============================================================================
 CONTENTS                                                     *aiswarm-contents*
@@ -24,10 +24,9 @@ executable on the scheduler machine (`$AISWARM_NVIM` or `nvim` on PATH):
 workers and streams are clean headless Neovim processes that load only the
 bundled modules. GNU timeout is needed only by legacy v2 boards.
 
-Root precedence: `root` option → $AISWARM_ROOT → $HIVE_ROOT (warns once) →
-nearest `.aiswarm` or `.hive` in the cwd's ancestors → candidate
-<git root>/.aiswarm, which is never created implicitly. Both directories in
-one place require `:AISwarm project choose`.
+Root precedence: `root` option → $AISWARM_ROOT → nearest `.aiswarm` in the
+cwd's ancestors → candidate <git root or cwd>/.aiswarm. Nothing is created
+implicitly. Existing boards at any other path require explicit selection.
 
 ==============================================================================
 COMMANDS                                                     *aiswarm-commands*
@@ -93,7 +92,7 @@ BOARDS AND MIGRATION                                            *aiswarm-boards*
 v3 boards (`board.json`, schema 3) keep a write-ahead control journal with
 rebuildable projections, immutable attempts (own logs, report, telemetry),
 owned locks with liveness recovery, and a persisted scheduler identity. Legacy
-v2 boards (`.hive/tasks/ready` …) still work for monitoring and the old
+v2 boards (`.aiswarm/tasks/ready` …) still work for monitoring and the old
 actions; `migrate --dry-run` inventories them without writing, `migrate`
 requires stopped legacy workers, writes a verified backup under
 `<root>/migration/`, imports one labelled legacy attempt per task with
@@ -121,13 +120,12 @@ CONFIGURATION                                                  *aiswarm-config*
     require("aiswarm").setup({
       bin = "/absolute/path/to/aiswarm.nvim/bin/aiswarm",
       root = nil,
-      ui = { layout = "float" or "editor", width = 0.92, height = 0.86,
-             icons = "unicode", "ascii" or a table, motion = false, quiet_after_s = 60 },
+      ui = { layout = "float", width = 0.92, height = 0.86,
+             icons = "unicode", motion = false, quiet_after_s = 60 },
       telemetry = { enabled = true, heartbeat_ms = 5000, flush_ms = 100,
                     reconcile_ms = 10000 },
       notify = { completed = true, failed = true, input_required = true,
                  started = false, progress = false },
-      compat = { hive_commands = true, hive_events = false },
       follow = true, register_server = true, peek_lines = 80,
       command_timeout_ms = 5000,
     })
@@ -144,21 +142,26 @@ scheduler(action), refresh(cb), subscribe(fn), statusline() (cached, no
 I/O), status(), project.open(root), project.resolve(), on_event(e),
 on_event_json(json, root).
 
-`User AISwarmEvent` receives every normalized control record; `User
-HiveEvent` is emitted only with `compat.hive_events`.
+`User AISwarmEvent` receives normalized control records through the one
+canonical client. Duplicate control sequences are suppressed.
 
 ==============================================================================
 COMPATIBILITY                                                  *aiswarm-compat*
 
-`require("hive")` and the `hive.state`, `hive.ui`, `hive.health` modules forward to the same runtime and
-warn once. The ten `:Hive*` commands remain aliases (`:HiveKill` keeps its
-cancel-and-requeue meaning and warns). `bin/hive`/`bin/hive-push` forward to
-the canonical binaries; under the `hive` name `init` still creates a v2
-board. `HIVE_*` variables are accepted with one warning; `AISWARM_*` wins.
-Old boards stay at `.hive/`; nothing is moved.
+This is a standalone replacement with one public namespace: aiswarm.nvim,
+require("aiswarm"), :AISwarm, aiswarm / aiswarm-push, and AISWARM_* variables.
+Schema-v2 data can be opened at an explicit root and migrated through this
+package. No board directories are moved automatically. Internal
+`aiswarm.legacy.*` modules are storage compatibility implementation details.
 
 ==============================================================================
 LIMITS                                                         *aiswarm-limits*
+
+Release acceptance is incomplete. See docs/aiswarm-implementation-audit.md
+and docs/aiswarm-remediation-sdd-plan.md. Known gaps include inspector row
+targeting, cross-project delayed actions, output rotation, activity bounds,
+notification history, migration concurrency and missing release evidence.
+Some validated configuration switches are not wired to runtime behavior.
 
 Provider-native events (tool calls, usage, input requests), an interactive
 input action and delivery into a named orchestrator runtime are not

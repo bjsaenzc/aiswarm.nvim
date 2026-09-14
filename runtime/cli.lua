@@ -27,7 +27,7 @@ if not cmd then die(1, "unknown command: " .. tostring(name) .. " (try `aiswarm 
 local parsed, perr = U.parse_args(argv, cmd.bools)
 if not parsed then die(1, perr) end
 parsed.json = json
-parsed.root = vim.env.AISWARM_ROOT or vim.env.HIVE_ROOT or (vim.uv.cwd() .. "/.aiswarm")
+parsed.root = vim.env.AISWARM_ROOT or (vim.uv.cwd() .. "/.aiswarm")
 parsed.plugin = plugin
 
 local ok, res = xpcall(function() return cmd.run(parsed) end, function(e)
