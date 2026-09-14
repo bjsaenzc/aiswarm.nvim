@@ -1,0 +1,17 @@
+{
+  "success":           { "exit": 0, "report": true,  "stdout_min_lines": 3, "stderr": false },
+  "quiet":             { "exit": 0, "report": true,  "stdout_min_lines": 0, "quiet_ticks": 10 },
+  "partial-utf8":      { "exit": 0, "report": true,  "stdout_bytes_contain": ["café ok", "日本語 テスト", "🚀 launch", "e\u0301 combining"] },
+  "interleaved":       { "exit": 0, "report": true,  "stdout_lines": ["out 1","out 2","out 3","out 4","out 5"], "stderr_lines": ["err 1","err 2","err 3","err 4","err 5"] },
+  "progress":          { "exit": 0, "report": true,  "phases": ["planning","editing","testing"] },
+  "failure":           { "exit": 1, "report": false, "stderr_contains": "boom" },
+  "timeout":           { "exit": "killed", "report": false },
+  "missing-report":    { "exit": 0, "report": false },
+  "input-request":     { "exit": 0, "report": true,  "stdout_contains": "input_required id=req-1" },
+  "flood":             { "exit": 0, "report": true,  "stdout_lines_default": 20000 },
+  "late-finish":       { "exit": 0, "report": true,  "grandchild": true },
+  "unresponsive":      { "exit": "killed", "report": false },
+  "grandchild-hold":   { "exit": "barrier", "report": false, "grandchild": true },
+  "bench":             { "exit": 0, "report": true,  "load": "AISWARM_BENCH_* rates for AISWARM_BENCH_TASK_SECONDS" },
+  "control-sequences": { "exit": 0, "report": true,  "stdout_contains": "plain" }
+}

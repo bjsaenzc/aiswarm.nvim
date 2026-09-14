@@ -1,0 +1,5 @@
+{"frame":"hello","schema_version":1,"board_id":"57fc3ea0-6b8f-45c2-8e8f-3a5f98cc4ed3","journal_generation":1,"capabilities":{"attempts":true,"telemetry":true,"ack":true},"resumed_from":null}
+{"frame":"snapshot","control_seq":42,"tasks":[],"attempts":[],"scheduler":{"state":"stopped"},"activity":{},"next_cursor":"eyJ2IjoxfQ"}
+{"frame":"event","event":{"schema_version":1,"board_id":"57fc3ea0-6b8f-45c2-8e8f-3a5f98cc4ed3","journal_generation":1,"control_seq":43,"event_id":"57fc3ea0-6b8f-45c2-8e8f-3a5f98cc4ed3:c:1:43","observed_at":"2026-09-14T03:00:01.000Z","type":"scheduler.changed","payload":{"scheduler":{"state":"running"}}},"next_cursor":"eyJ2IjoxfQ"}
+{"frame":"gap","source":"attempt:6520181b-1cb0-4563-985b-3b60d78775db","from":1,"to":200,"reason":"retention","next_cursor":"eyJ2IjoxfQ"}
+{"frame":"status","state":"live","next_cursor":"eyJ2IjoxfQ"}

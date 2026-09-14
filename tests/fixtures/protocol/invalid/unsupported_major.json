@@ -1,0 +1,1 @@
+{"expect":"incompatible","record":{"schema_version":2,"board_id":"57fc3ea0-6b8f-45c2-8e8f-3a5f98cc4ed3","journal_generation":1,"control_seq":1,"event_id":"x","observed_at":"2026-09-14T03:00:00.000Z","type":"task.queued","task_id":"T-1","payload":{}}}

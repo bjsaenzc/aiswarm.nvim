@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Push one control event into a running Neovim. Set: export AISWARM_ON_EVENT=aiswarm-push
+# The plugin writes v:servername into <root>/nvim.server when it starts.
+root="${AISWARM_ROOT:-${HIVE_ROOT:-$PWD/.aiswarm}}"
+[ -d "$root" ] || root="${HIVE_ROOT:-$PWD/.hive}"
+srv=$(head -1 "$root/nvim.server" 2>/dev/null) || exit 0
+[ -n "$srv" ] || exit 0
+# vimscript single-quoted string: only ' needs escaping, as ''
+root=$(cd "$root" 2>/dev/null && pwd -P) || exit 0
+escaped_root=${root//\'/\'\'}
+payload=${1//\'/\'\'}
+# Prefer the canonical module; fall back to the legacy shim in older editors.
+nvim --server "$srv" --remote-expr \
+  "luaeval(\"(function() local ok, m = pcall(require, 'aiswarm') if ok then return m.on_event_json(_A[1], _A[2]) end return require'hive'.on_event_json(_A[1], _A[2]) end)()\", ['$payload', '$escaped_root'])" >/dev/null 2>&1 || true

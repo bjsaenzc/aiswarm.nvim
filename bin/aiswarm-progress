@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Explicit worker update helper (SDD-075): drops a validated message into the attempt inbox.
+#   aiswarm-progress --phase testing --message "Running tests" [--task ID --attempt A --root R]
+# Board/task/attempt default to the environment the worker sets (AISWARM_BOARD_ID/AISWARM_TASK/AISWARM_ATTEMPT).
+set -u
+root="${AISWARM_ROOT:-}"; task="${AISWARM_TASK:-}"; attempt="${AISWARM_ATTEMPT:-}"; board="${AISWARM_BOARD_ID:-}"
+phase=""; message=""; type="agent.progress"; completed=""; total=""; artifact=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --root) root="$2"; shift 2;; --task) task="$2"; shift 2;; --attempt) attempt="$2"; shift 2;; --board) board="$2"; shift 2;;
+    --phase) phase="$2"; shift 2;; --message|-m) message="$2"; shift 2;; --completed) completed="$2"; shift 2;; --total) total="$2"; shift 2;;
+    --artifact) type="agent.artifact"; artifact="$2"; shift 2;;
+    *) message="${message:+$message }$1"; shift;;
+  esac
+done
+[ -n "$root" ] && [ -n "$task" ] && [ -n "$attempt" ] || { echo "aiswarm-progress: missing root/task/attempt" >&2; exit 3; }
+[ -n "$board" ] || board="$(sed -n 's/.*"board_id":"\([^"]*\)".*/\1/p' "$root/board.json" 2>/dev/null | head -1)"
+inbox="$root/attempts/$attempt/inbox"
+mkdir -p "$inbox" || exit 4
+id="$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"
+esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
+payload="{\"phase\":\"$(esc "$phase")\",\"message\":\"$(esc "$message")\",\"provenance\":\"worker_report\""
+[ -n "$completed" ] && payload="$payload,\"completed\":$completed"
+[ -n "$total" ] && payload="$payload,\"total\":$total"
+[ -n "$artifact" ] && payload="{\"path\":\"$(esc "$artifact")\",\"provenance\":\"worker_report\""
+payload="$payload}"
+tmp="$inbox/.$id.tmp"
+printf '{"message_id":"%s","board_id":"%s","task_id":"%s","attempt_id":"%s","type":"%s","source":"worker_inbox","observed_at":"%s","payload":%s}\n' \
+  "$id" "$board" "$task" "$attempt" "$type" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$payload" > "$tmp" && mv "$tmp" "$inbox/$id.json"

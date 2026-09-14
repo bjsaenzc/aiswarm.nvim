@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Deterministic fake provider (SDD-003). Never contacts a network or a real
+# agent CLI. The scenario is chosen by AISWARM_FAKE_SCENARIO (default: success)
+# or by the first argument when it is "--scenario NAME". Any remaining
+# arguments (the prompt) are ignored except where a scenario documents them.
+#
+# Every scenario reads its timing from AISWARM_FAKE_TICK_MS (default 20) so
+# tests run fast but still observe ordering. AISWARM_FAKE_REPORT names the
+# report path a cooperative scenario writes to (empty = no report).
+# AISWARM_FAKE_BARRIER names a file; scenarios that block wait for it to exist.
+set -u
+scenario="${AISWARM_FAKE_SCENARIO:-success}"
+if [ "${1:-}" = "--scenario" ]; then scenario="$2"; shift 2; fi
+tick="${AISWARM_FAKE_TICK_MS:-20}"
+report="${AISWARM_FAKE_REPORT:-${AISWARM_REPORT_PATH:-}}"
+barrier="${AISWARM_FAKE_BARRIER:-}"
+progress="${AISWARM_FAKE_PROGRESS:-}"   # absolute path of an explicit progress helper, optional
+
+nap() { # nap <ticks>
+  local n="$1"; sleep "$(awk -v t="$tick" -v n="$n" 'BEGIN{printf "%.3f", (t*n)/1000}')"
+}
+wait_barrier() { while [ -n "$barrier" ] && [ ! -e "$barrier" ]; do sleep 0.02; done; }
+write_report() {
+  [ -n "$report" ] || return 0
+  mkdir -p "$(dirname "$report")"
+  printf '## Summary\nfake %s\n\n## Files changed\n%s\n\n## Decisions\n(none)\n\n## Verification\nfake: not run\n\n## Follow-ups\n(none)\n' \
+    "$scenario" "${AISWARM_FAKE_FILES:-(none)}" > "$report"
+}
+emit_progress() { [ -n "$progress" ] && "$progress" --phase "$1" --message "$2" >/dev/null 2>&1 || true; }
+
+case "$scenario" in
+  success)          # ordinary run: a few lines, then a report and exit 0
+    echo "fake: starting"; nap 1; echo "fake: working"; nap 1; write_report; echo "fake: done"; exit 0;;
+  quiet)            # alive but silent for a while (heartbeat only), then succeeds
+    wait_barrier; nap 10; write_report; exit 0;;
+  partial-utf8)     # a multibyte character split across two writes, plus CJK/emoji lines
+    printf 'caf'; nap 1; printf '\xc3'; nap 1; printf '\xa9 ok\n'
+    printf '日本語 テスト\n'; printf '🚀 launch\n'; printf 'e\xcc\x81 combining\n'
+    write_report; exit 0;;
+  interleaved)      # stdout and stderr alternate; byte order per stream is fixed
+    for i in 1 2 3 4 5; do echo "out $i"; echo "err $i" >&2; nap 1; done; write_report; exit 0;;
+  progress)         # explicit progress milestones through the helper, then success
+    echo "planning"; emit_progress planning "Reading the task"; nap 1
+    echo "editing";  emit_progress editing "Changing files"; nap 1
+    echo "testing";  emit_progress testing "Running focused tests"; nap 1
+    write_report; exit 0;;
+  failure)          # writes an error to stderr and exits 1 without a report
+    echo "fake: attempting"; nap 1; echo "fake: boom" >&2; exit 1;;
+  timeout)          # runs until killed (the harness's timeout must end it)
+    trap 'exit 124' TERM; echo "fake: hanging"; while :; do sleep 0.1; done;;
+  missing-report)   # exits 0 but never writes a report
+    echo "fake: forgot the report"; nap 1; exit 0;;
+  input-request)    # asks for input on stdout then waits for the barrier
+    echo "fake: input_required id=req-1 prompt=Continue?"; wait_barrier; write_report; exit 0;;
+  flood)            # many lines quickly (AISWARM_FAKE_LINES, default 20000)
+    n="${AISWARM_FAKE_LINES:-20000}"; awk -v n="$n" 'BEGIN{for(i=1;i<=n;i++) printf "line %06d %s\n", i, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}'
+    write_report; exit 0;;
+  late-finish)      # spawns a grandchild that outlives the provider, then exits 0
+    ( trap '' TERM; sleep 60 ) >/dev/null 2>&1 & echo "grandchild=$!"; nap 1; write_report; exit 0;;
+  unresponsive)     # ignores SIGTERM; only SIGKILL ends it (forced cancellation)
+    trap '' TERM; echo "fake: ignoring TERM"; while :; do sleep 0.1; done;;
+  grandchild-hold)  # process tree with a grandchild; parent blocks until barrier (cancellation experiments)
+    ( sleep 300 ) & echo "grandchild=$!"; echo "fake: holding"; wait_barrier; exit 0;;
+  bench)            # reference load: AISWARM_BENCH_PROGRESS_PER_S progress records/s (direct inbox writes) and
+                    # AISWARM_BENCH_OUTPUT_BPS bytes/s of output for AISWARM_BENCH_TASK_SECONDS, then a report.
+                    # bash 3.2 has no cheap clock, so two messages are written per sleep and no date(1) is called.
+    per_s="${AISWARM_BENCH_PROGRESS_PER_S:-20}"; bps="${AISWARM_BENCH_OUTPUT_BPS:-102400}"; secs="${AISWARM_BENCH_TASK_SECONDS:-5}"
+    chunk=$(( bps / per_s )); line=$(printf 'x%.0s' $(seq 1 "$chunk"))
+    interval=$(awk -v p="$per_s" 'BEGIN{printf "%.4f", 2/p}')
+    iterations=$(awk -v p="$per_s" -v s="$secs" 'BEGIN{printf "%d", p*s/2}')
+    n=0
+    while [ "$n" -lt "$iterations" ]; do
+      for half in 1 2; do
+        n=$((n + 1))
+        if [ -n "${AISWARM_INBOX:-}" ]; then
+          printf '{"message_id":"bench-%s-%s","board_id":"%s","task_id":"%s","attempt_id":"%s","type":"agent.progress","source":"worker_inbox","payload":{"phase":"working","message":"bench step %s","provenance":"worker_report"}}\n' \
+            "$$" "$n" "${AISWARM_BOARD_ID:-}" "${AISWARM_TASK:-}" "${AISWARM_ATTEMPT:-}" "$n" > "$AISWARM_INBOX/.bench-$$-$n.tmp" && mv "$AISWARM_INBOX/.bench-$$-$n.tmp" "$AISWARM_INBOX/bench-$$-$n.json"
+        fi
+        echo "$line"
+      done
+      sleep "$interval"
+    done
+    write_report; exit 0;;
+  control-sequences) # hostile terminal control content that must be sanitized by viewers
+    printf '\033]0;evil title\007\033[2J\033[31mred\033[0m\x1b]52;c;ZXZpbA==\x07 plain\n'; write_report; exit 0;;
+  *) echo "fake-provider: unknown scenario $scenario" >&2; exit 64;;
+esac

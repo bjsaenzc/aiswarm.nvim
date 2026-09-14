@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Legacy launcher: forwards every argument to the canonical `aiswarm` binary. Never recurses.
+# Under this name `init` keeps creating a v2 (.hive) board so old scripts behave exactly as documented.
+export AISWARM_INVOKED_AS=hive
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aiswarm" "$@"

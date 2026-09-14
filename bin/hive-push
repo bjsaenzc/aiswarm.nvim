@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Legacy push hook: forwards to aiswarm-push. Never recurses.
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aiswarm-push" "$@"

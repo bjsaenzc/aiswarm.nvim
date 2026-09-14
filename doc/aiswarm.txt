@@ -1,0 +1,180 @@
+*aiswarm.txt*                 AI swarm task workspace for Neovim (formerly hive)
+
+==============================================================================
+CONTENTS                                                     *aiswarm-contents*
+
+    Setup                   |aiswarm-setup|
+    Commands                |aiswarm-commands|
+    Workspace keys          |aiswarm-keys|
+    Composer                |aiswarm-composer|
+    Boards and migration    |aiswarm-boards|
+    Telemetry and streams   |aiswarm-telemetry|
+    Configuration           |aiswarm-config|
+    API and events          |aiswarm-api|
+    Compatibility           |aiswarm-compat|
+    Limits                  |aiswarm-limits|
+    Troubleshooting         |aiswarm-troubleshooting|
+
+==============================================================================
+SETUP                                                           *aiswarm-setup*
+
+Requires Neovim 0.10.4+, snacks.nvim and the bundled `bin/aiswarm` launcher.
+The launcher needs bash 3.2+, jq, tmux 3.2+ and, for v3 boards, a Neovim
+executable on the scheduler machine (`$AISWARM_NVIM` or `nvim` on PATH):
+workers and streams are clean headless Neovim processes that load only the
+bundled modules. GNU timeout is needed only by legacy v2 boards.
+
+Root precedence: `root` option → $AISWARM_ROOT → $HIVE_ROOT (warns once) →
+nearest `.aiswarm` or `.hive` in the cwd's ancestors → candidate
+<git root>/.aiswarm, which is never created implicitly. Both directories in
+one place require `:AISwarm project choose`.
+
+==============================================================================
+COMMANDS                                                     *aiswarm-commands*
+
+:AISwarm [open]             Open or focus the workspace.            *:AISwarm*
+:AISwarm pick               Live task picker; Enter inspects.
+:[range]AISwarm new [--legacy] [--fresh]
+                            Compose a task; the range becomes prompt context.
+                            --legacy imports a `#:` form, --fresh skips the
+                            latest draft.
+:AISwarm activity           Combined activity view.
+:AISwarm results            Reports picker, one entry per attempt.
+:AISwarm inspect / output / report / attach / cancel / retry [id]
+                            Act on the selected task or open a picker.
+:AISwarm scheduler start / stop / pause / resume
+                            Stop ends monitoring (workers continue); pause
+                            only stops new dispatch.
+:AISwarm project [show / open <root> / choose]
+:AISwarm init [root]        Create a board explicitly.
+:AISwarm migrate [--dry-run / --upgrade / --resume / --rollback]
+:AISwarm refresh            Reconcile now (Ctrl-r in the workspace).
+:AISwarm health             Runs :checkhealth aiswarm.
+:AISwarm help               Lists subcommands.
+
+Task ids complete from the cached store. Actions that need a v3 board report
+"not available yet" on legacy boards instead of doing nothing.
+
+==============================================================================
+WORKSPACE KEYS                                                   *aiswarm-keys*
+
+Any pane: Tab / S-Tab cycle panes, q close, ? action menu, n new task,
+P toggle dispatch pause, Ctrl-r reconcile, p pin the inspector, S start the
+scheduler when stopped.
+
+Tasks: j/k move, Enter inspect (or toggle a group header), t Output, R Report,
+g attach tmux (explicit), e edit queued, x cancel (confirmation names the
+attempt), r retry, y copy id, / filter, Esc clear filter, 1-5 group filters,
+za/zc/zo collapse. Inspector: [ ] or H L tabs (Overview, Activity, Output,
+Report, Files, Attempts), f pause/resume view following, G end, s
+stdout/stderr, w wrap, o full transcript, Enter open file/select attempt,
+d diff, Backspace/Esc back to tasks. Activity: f, G, / filter
+(text, task:ID, provider:NAME, kind:K, level:L), v verbose, Enter inspect.
+
+Layouts follow the interior size: wide (≥110×28) list + inspector + tray,
+medium list + inspector (Activity as a tab), narrow one pane at a time,
+minimal (<40×12) picker only. Selection, filters, tab and scroll survive
+resizes. `ui.icons = "ascii"` needs no special font.
+
+==============================================================================
+COMPOSER                                                     *aiswarm-composer*
+
+A prompt buffer with a Title / Provider / Isolation header; Dependencies,
+Priority and Timeout are folded (Ctrl-a). Ctrl-p picks a provider (with
+availability), Ctrl-d toggles dependencies. Ctrl-s or :w validates and queues
+(inline diagnostics, cursor on the first bad field); Esc keeps an autosaved
+project-scoped draft that reopens next time; Ctrl-q discards it; Ctrl-e
+exports the legacy `#:` form. Edits of queued tasks carry the expected
+revision and report conflicts instead of overwriting.
+
+==============================================================================
+BOARDS AND MIGRATION                                            *aiswarm-boards*
+
+v3 boards (`board.json`, schema 3) keep a write-ahead control journal with
+rebuildable projections, immutable attempts (own logs, report, telemetry),
+owned locks with liveness recovery, and a persisted scheduler identity. Legacy
+v2 boards (`.hive/tasks/ready` …) still work for monitoring and the old
+actions; `migrate --dry-run` inventories them without writing, `migrate`
+requires stopped legacy workers, writes a verified backup under
+`<root>/migration/`, imports one labelled legacy attempt per task with
+evidence, publishes `board.json` last, and can resume or roll back. Rollback
+refuses to discard new v3 work unless --force is given.
+
+==============================================================================
+TELEMETRY AND STREAMS                                        *aiswarm-telemetry*
+
+Each attempt has one telemetry writer (heartbeats every 5 s, batched output
+ranges, explicit progress from `aiswarm-progress`, warnings and gaps). `aiswarm
+stream --follow` replays control and telemetry with opaque cursors; consumers
+deduplicate by event id and `aiswarm ack --consumer NAME --cursor C` after
+durable acceptance. `aiswarm logs` pages raw output by segment/offset;
+`aiswarm briefing` summarizes failures, blockers and progress with references.
+Retention: 100 MiB raw / 50 MiB telemetry per attempt, 7 days of inactive
+history (`aiswarm retention`); gaps are explicit. Health labels: Quiet (no
+output for 60 s), Telemetry stale (three missed heartbeats), Failed: orphaned
+(proven dead worker). Reports are labelled complete/incomplete/missing/
+synthesized; verification text is the agent's claim.
+
+==============================================================================
+CONFIGURATION                                                  *aiswarm-config*
+>
+    require("aiswarm").setup({
+      bin = "/absolute/path/to/aiswarm.nvim/bin/aiswarm",
+      root = nil,
+      ui = { layout = "float" or "editor", width = 0.92, height = 0.86,
+             icons = "unicode", "ascii" or a table, motion = false, quiet_after_s = 60 },
+      telemetry = { enabled = true, heartbeat_ms = 5000, flush_ms = 100,
+                    reconcile_ms = 10000 },
+      notify = { completed = true, failed = true, input_required = true,
+                 started = false, progress = false },
+      compat = { hive_commands = true, hive_events = false },
+      follow = true, register_server = true, peek_lines = 80,
+      command_timeout_ms = 5000,
+    })
+<
+Every value is type/range checked; invalid settings raise before anything
+starts. Switching projects (`:AISwarm project open`) keeps these preferences.
+
+==============================================================================
+API AND EVENTS                                                    *aiswarm-api*
+
+require("aiswarm").open({task=, tab=}), pick(), new(lines), results(),
+inspect(id), output(id), report(id), attach(id), cancel(id), retry(id),
+scheduler(action), refresh(cb), subscribe(fn), statusline() (cached, no
+I/O), status(), project.open(root), project.resolve(), on_event(e),
+on_event_json(json, root).
+
+`User AISwarmEvent` receives every normalized control record; `User
+HiveEvent` is emitted only with `compat.hive_events`.
+
+==============================================================================
+COMPATIBILITY                                                  *aiswarm-compat*
+
+`require("hive")` and the `hive.state`, `hive.ui`, `hive.health` modules forward to the same runtime and
+warn once. The ten `:Hive*` commands remain aliases (`:HiveKill` keeps its
+cancel-and-requeue meaning and warns). `bin/hive`/`bin/hive-push` forward to
+the canonical binaries; under the `hive` name `init` still creates a v2
+board. `HIVE_*` variables are accepted with one warning; `AISWARM_*` wins.
+Old boards stay at `.hive/`; nothing is moved.
+
+==============================================================================
+LIMITS                                                         *aiswarm-limits*
+
+Provider-native events (tool calls, usage, input requests), an interactive
+input action and delivery into a named orchestrator runtime are not
+implemented; every provider gets generic output/heartbeat/progress telemetry
+and the subscription, briefing and copy/export route. Real-terminal evidence
+exists for macOS only. `aiswarm send` is a legacy v2 command with no v3
+equivalent.
+
+==============================================================================
+TROUBLESHOOTING                                        *aiswarm-troubleshooting*
+
+Run :checkhealth aiswarm (same findings as `aiswarm doctor`). Stream
+reconnecting: Ctrl-r reconnects now; offline data stays visible with its age.
+Interrupted migration: `:AISwarm migrate --resume` or `--rollback`. A stale
+control lock from a crashed process is recovered automatically; a lock held
+by a live process is never stolen. Tests: `bash scripts/test-aiswarm.sh
+--suite core`.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

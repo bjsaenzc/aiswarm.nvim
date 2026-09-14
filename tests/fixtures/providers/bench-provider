@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Provider executable wrapper for the exact-rate Lua generator (SDD-097).
+exec "${AISWARM_NVIM:-nvim}" --clean --headless --noplugin -u NONE -i NONE -n -l "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bench-provider.lua" "$@"

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Bundled mock provider: simulated execution that spends no tokens. Exercises the worker
+# protocol: prints output, reports progress through the helper, writes the attempt report.
+set -u
+rendered="${1:-}"
+echo "[mock] working on task ${AISWARM_TASK:-?} attempt ${AISWARM_ATTEMPT:-?}"
+[ -n "${AISWARM_PROGRESS:-}" ] && "$AISWARM_PROGRESS" --phase working --message "mock run in progress" >/dev/null 2>&1 || true
+sleep "${AISWARM_MOCK_SLEEP:-2}"
+if [ -n "${AISWARM_REPORT_PATH:-}" ]; then
+  mkdir -p "$(dirname "$AISWARM_REPORT_PATH")"
+  printf '## Summary\nmock run of %s\n\n## Files changed\n(none)\n\n## Decisions\n(none)\n\n## Verification\nnone (simulated)\n\n## Follow-ups\n(none)\n' \
+    "${AISWARM_TASK:-task}" > "$AISWARM_REPORT_PATH"
+fi
+echo "[mock] done"
